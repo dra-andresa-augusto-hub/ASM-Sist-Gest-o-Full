@@ -296,6 +296,13 @@ body {
     cursor: pointer;
     box-shadow: 0 10px 30px rgba(22, 163, 74, 0.3);
     margin-bottom: 20px;
+    text-decoration: none;
+    display: inline-block;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+.cta-button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 40px rgba(22, 163, 74, 0.4);
 }
 .cta-text {
     font-size: 18px;
@@ -327,6 +334,10 @@ body {
         page-break-after: always;
     }
     .page:last-child { page-break-after: avoid; }
+    .cta-button {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
 }
 </style>
 </head>
@@ -472,7 +483,7 @@ body {
     </div>
     
     <div class="cta-section">
-        <button class="cta-button">QUERO PROFISSIONALIZAR MINHA CLÍNICA →</button>
+        <a href="https://wa.me/5531997867911?text=Olá!%20Vi%20a%20apresentação%20do%20ASM%20Gestão%20Clínica%20e%20quero%20comprar%20por%20R$%20397.%20Pode%20me%20passar%20as%20instruções?" class="cta-button" target="_blank">QUERO PROFISSIONALIZAR MINHA CLÍNICA →</a>
         <p class="cta-text">🔑 Ativação imediata • Acesso em até 2 minutos após a confirmação</p>
     </div>
     
