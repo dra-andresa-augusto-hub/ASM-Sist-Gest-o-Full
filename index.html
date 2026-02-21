@@ -85,9 +85,11 @@ body{font-family:Arial,sans-serif;background:#f0f2f5}
 .dashboard-card h3{color:#1e3a5f;margin-bottom:15px;text-align:center}
 .chart-container{position:relative;height:250px}
 
-/* MULTICLÍNICA */
-.profissional-card{background:#f7fafc;padding:15px;border-radius:8px;margin:10px 0;border:2px solid #e2e8f0}
-.profissional-card.active{border-color:#38a169;background:#f0fff4}
+/* MULTICLÍNICA - SELEÇÃO DE PROFISSIONAL */
+.profissional-selecao{background:#f7fafc;padding:15px;border-radius:8px;margin-bottom:20px;border:2px solid #e2e8f0}
+.profissional-item{display:flex;justify-content:space-between;align-items:center;padding:10px;background:white;border-radius:5px;margin:5px 0;border:2px solid transparent;cursor:pointer}
+.profissional-item:hover{border-color:#1e3a5f}
+.profissional-item.ativo{border-color:#38a169;background:#f0fff4}
 
 /* CONFIGURAÇÕES TIPOS */
 .tipo-item{display:flex;justify-content:space-between;align-items:center;padding:10px;background:#f7fafc;border-radius:5px;margin:5px 0}
@@ -107,6 +109,7 @@ body{font-family:Arial,sans-serif;background:#f0f2f5}
 .calendar-day{background:#f7fafc;min-height:100px;padding:10px;border-radius:5px;cursor:pointer;border:1px solid #e2e8f0}
 .appointment{background:#1e3a5f;color:white;padding:5px;margin:2px 0;border-radius:3px;font-size:12px;display:flex;justify-content:space-between;align-items:center}
 .appointment.cancelled{display:none}
+.appointment .profissional-tag{font-size:10px;background:rgba(255,255,255,0.3);padding:2px 5px;border-radius:3px;margin-left:5px}
 
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
 .modal.active{display:flex}
@@ -266,7 +269,7 @@ th{background:#f7fafc;font-weight:bold;color:#2d3748}
     
     <div class="form-group" style="text-align:left">
       <label>Especialidade *</label>
-      <select id="cadEspecialidade">
+      <select id="cadEspecialidade" onchange="atualizarLabelRegistro()">
         <option value="">Selecione...</option>
         <option value="fisioterapia">Fisioterapia</option>
         <option value="medicina">Medicina</option>
@@ -279,6 +282,11 @@ th{background:#f7fafc;font-weight:bold;color:#2d3748}
         <option value="odontologia">Odontologia</option>
         <option value="educacao_fisica">Educação Física</option>
       </select>
+    </div>
+    
+    <div class="form-group" style="text-align:left">
+      <label id="labelRegistro">Registro Profissional *</label>
+      <input type="text" id="cadRegistro" placeholder="00 0000 F">
     </div>
     
     <div class="form-group" style="text-align:left">
@@ -307,6 +315,12 @@ th{background:#f7fafc;font-weight:bold;color:#2d3748}
     <div>
       <button onclick="logout()">🚪 Sair</button>
     </div>
+  </div>
+
+  <!-- SELEÇÃO DE PROFISSIONAL (MULTICLÍNICA) -->
+  <div id="selecaoProfissional" class="profissional-selecao" style="display:none">
+    <h3 style="color:#1e3a5f;margin-bottom:10px">Selecione o Profissional:</h3>
+    <div id="listaProfissionaisClinica"></div>
   </div>
 
   <div class="nav">
@@ -404,7 +418,7 @@ th{background:#f7fafc;font-weight:bold;color:#2d3748}
         </div>
         <div class="form-group">
           <label>Especialidade</label>
-          <select id="configEspecialidade">
+          <select id="configEspecialidade" onchange="atualizarLabelRegistroConfig()">
             <option value="fisioterapia">Fisioterapia</option>
             <option value="medicina">Medicina</option>
             <option value="nutricao">Nutrição</option>
@@ -416,6 +430,10 @@ th{background:#f7fafc;font-weight:bold;color:#2d3748}
             <option value="odontologia">Odontologia</option>
             <option value="educacao_fisica">Educação Física</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label id="labelRegistroConfig">Registro Profissional</label>
+          <input type="text" id="configRegistro">
         </div>
         <div class="form-group">
           <label>Chave Pix</label>
@@ -768,830 +786,1493 @@ th{background:#f7fafc;font-weight:bold;color:#2d3748}
 
 <script>
 
-// CONFIGURAÇÃO FIREBASE - SUAS CREDENCIAIS REAIS
+// ==========================================
+// PARTE 2 - JAVASCRIPT PRINCIPAL
+// ==========================================
+
+// CONFIGURAÇÃO FIREBASE - SUBSTITUA PELAS SUAS CREDENCIAIS
 const firebaseConfig = {
-  apiKey: "AIzaSyDAP8Krf1QYRUf2VmgeGRXL6eoceVcDnp4",
-  authDomain: "asm-gestao-clinica.firebaseapp.com",
-  databaseURL: "https://asm-gestao-clinica-default-rtdb.firebaseio.com",
-  projectId: "asm-gestao-clinica",
-  storageBucket: "asm-gestao-clinica.firebasestorage.app",
-  messagingSenderId: "846179775289",
-  appId: "1:846179775289:web:b914c4e024b1fb13a66ee8"
+  apiKey: "SUA_API_KEY",
+  authDomain: "SEU_PROJETO.firebaseapp.com",
+  databaseURL: "https://SEU_PROJETO-default-rtdb.firebaseio.com",
+  projectId: "SEU_PROJETO",
+  storageBucket: "SEU_PROJETO.appspot.com",
+  messagingSenderId: "000000000",
+  appId: "1:000000000:web:000000000000"
 };
 
-// INICIALIZAR FIREBASE
+// Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
 // VARIÁVEIS GLOBAIS
 let currentUser = null;
+let currentClinica = null;
 let currentProfissional = null;
 let isAdmin = false;
-let currentDate = new Date();
-let currentPatientId = null;
-let currentApptId = null;
-let currentPaymentId = null;
-let selectedSessions = new Set();
-let selectedFinancial = new Set();
+let selectedAppointments = [];
+let currentMonth = new Date();
 let chartTipo = null;
 let chartPagamento = null;
 
-// TIPOS DE CONSULTA PADRÃO (EDITÁVEIS)
-let tiposConsulta = [
-  { id: 'consulta', nome: 'Consulta', valor: 150 },
-  { id: 'avaliacao', nome: 'Avaliação', valor: 200 },
-  { id: 'retorno', nome: 'Retorno', valor: 100 }
-];
+// DADOS ADMIN
+const ADMIN_EMAIL = "admin@asmgestao.com";
+const ADMIN_SENHA = "admin123";
 
-// DADOS DO PROFISSIONAL
-let profissionais = [];
-let pacientes = [];
-let agendamentos = [];
-let evolucoes = [];
-let despesas = [];
+// ==========================================
+// FUNÇÕES DE UTILIDADE
+// ==========================================
 
-// CONFIGURAÇÕES DE PROFISSÕES
-const professionConfig = {
-  fisioterapia: { name: 'Fisioterapia', registry: 'CREFITO', placeholder: '00 0000 F' },
-  medicina: { name: 'Medicina', registry: 'CRM', placeholder: '00 0000' },
-  nutricao: { name: 'Nutrição', registry: 'CRN', placeholder: '00 0000' },
-  psicologia: { name: 'Psicologia', registry: 'CRP', placeholder: '00 0000' },
-  fonoaudiologia: { name: 'Fonoaudiologia', registry: 'CREFONO', placeholder: '00 0000 F' },
-  terapia_ocupacional: { name: 'Terapia Ocupacional', registry: 'CREFITO', placeholder: '00 0000 TO' },
-  estetica: { name: 'Estética', registry: 'COREN', placeholder: '00 0000' },
-  enfermagem: { name: 'Enfermagem', registry: 'COREN', placeholder: '00 0000' },
-  odontologia: { name: 'Odontologia', registry: 'CRO', placeholder: '00 0000' },
-  educacao_fisica: { name: 'Educação Física', registry: 'CREF', placeholder: '00 0000' }
-};
-
-// INICIALIZAÇÃO
-document.addEventListener('DOMContentLoaded', function() {
-  verificarSessao();
-  document.getElementById('loginCPF').addEventListener('input', formatarCPFInput);
-  document.getElementById('ativacaoCPF').addEventListener('input', formatarCPFInput);
-});
-
-// FORMATAÇÃO CPF
-function formatarCPFInput(e) {
-  let cpf = e.target.value.replace(/\D/g, '');
-  if (cpf.length <= 11) {
-    cpf = cpf.replace(/(\d{3})(\d)/, '$1.$2');
-    cpf = cpf.replace(/(\d{3})(\d)/, '$1.$2');
-    cpf = cpf.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-  }
-  e.target.value = cpf;
+function formatCPF(cpf) {
+  cpf = cpf.replace(/\D/g, '');
+  return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 }
 
-// VERIFICAR SESSÃO
-function verificarSessao() {
-  const cpfSalvo = localStorage.getItem('asm_cpf');
-  const codigoSalvo = localStorage.getItem('asm_codigo');
-  
-  if (cpfSalvo && codigoSalvo) {
-    fazerLoginAutomatico(cpfSalvo, codigoSalvo);
-  } else {
-    mostrarTela('loginScreen');
-  }
+function unformatCPF(cpf) {
+  return cpf.replace(/\D/g, '');
 }
 
-// LOGIN AUTOMÁTICO
-async function fazerLoginAutomatico(cpf, codigo) {
-  const cpfNumeros = cpf.replace(/\D/g, '');
-  
-  // Verificar se é admin
-  if (cpf === 'admin') {
-    mostrarTela('loginScreen');
-    return;
-  }
-  
-  try {
-    const snapshot = await database.ref('activationCodes/' + codigo).once('value');
-    if (snapshot.exists() && snapshot.val().cpf === cpfNumeros) {
-      await carregarDadosProfissional(cpfNumeros, codigo);
-    } else {
-      mostrarTela('loginScreen');
-    }
-  } catch (error) {
-    mostrarTela('loginScreen');
-  }
+function formatCurrency(value) {
+  return 'R$ ' + parseFloat(value || 0).toFixed(2).replace('.', ',');
 }
 
-// MOSTRAR TELA
-function mostrarTela(telaId) {
-  document.querySelectorAll('.login-container, .activation-container, #mainSystem').forEach(el => {
-    el.style.display = 'none';
-  });
-  document.getElementById(telaId).style.display = 'flex';
-  if (telaId === 'mainSystem') document.getElementById(telaId).style.display = 'block';
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-');
+  return `${day}/${month}/${year}`;
 }
 
-// LOGIN COM CPF
-async function fazerLoginCPF() {
-  const cpf = document.getElementById('loginCPF').value;
-  const cpfNumeros = cpf.replace(/\D/g, '');
-  
-  if (cpfNumeros.length !== 11) {
-    mostrarErro('loginError', 'CPF inválido!');
-    return;
-  }
-  
-  // Buscar profissional pelo CPF
-  try {
-    const snapshot = await database.ref('profissionais').orderByChild('cpf').equalTo(cpfNumeros).once('value');
-    if (snapshot.exists()) {
-      const profData = snapshot.val();
-      const profId = Object.keys(profData)[0];
-      const prof = profData[profId];
-      
-      // Verificar se código ainda é válido
-      const codeSnapshot = await database.ref('activationCodes/' + prof.codigoAtivacao).once('value');
-      if (codeSnapshot.exists() && codeSnapshot.val().used) {
-        await carregarDadosProfissional(cpfNumeros, prof.codigoAtivacao);
-      } else {
-        mostrarErro('loginError', 'Código de ativação inválido!');
-      }
-    } else {
-      mostrarErro('loginError', 'CPF não encontrado. Faça a ativação primeiro!');
-    }
-  } catch (error) {
-    mostrarErro('loginError', 'Erro de conexão!');
-  }
+function getMonthYearKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// MOSTRAR LOGIN ADMIN
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+// ==========================================
+// NAVEGAÇÃO ENTRE TELAS
+// ==========================================
+
+function mostrarAtivacao() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('activationScreen').style.display = 'flex';
+  document.getElementById('ativacaoEtapa1').style.display = 'block';
+  document.getElementById('ativacaoEtapa2').style.display = 'none';
+}
+
+function voltarLogin() {
+  document.getElementById('activationScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+function voltarEtapa1() {
+  document.getElementById('ativacaoEtapa2').style.display = 'none';
+  document.getElementById('ativacaoEtapa1').style.display = 'block';
+}
+
 function mostrarLoginAdmin() {
   const form = document.getElementById('adminLoginForm');
   form.style.display = form.style.display === 'block' ? 'none' : 'block';
 }
 
-// LOGIN ADMIN
-function loginAdmin() {
-  const email = document.getElementById('adminEmail').value;
-  const senha = document.getElementById('adminSenha').value;
-  
-  // Credenciais fixas do admin
-  if (email === 'andresa@asmgestao.com' && senha === 'andresa123') {
-    isAdmin = true;
-    currentUser = { tipo: 'admin', email: email };
-    mostrarTela('mainSystem');
-    document.getElementById('btnAdmin').classList.add('visible');
-    document.getElementById('currentUserName').textContent = 'Administrador';
-    document.getElementById('currentUserEspecialidade').textContent = 'Sistema';
-    document.getElementById('currentUserRegistry').textContent = 'ADMIN';
-    inicializarSistema();
-  } else {
-    alert('Credenciais de administrador inválidas!');
-  }
-}
+// ==========================================
+// LOGIN E ATIVAÇÃO
+// ==========================================
 
-// MOSTRAR TELA DE ATIVAÇÃO
-function mostrarAtivacao() {
-  mostrarTela('activationScreen');
-  document.getElementById('ativacaoEtapa1').style.display = 'block';
-  document.getElementById('ativacaoEtapa2').style.display = 'none';
-}
-
-// VERIFICAR CPF NA ATIVAÇÃO
-function verificarCPFAtivacao() {
-  const cpf = document.getElementById('ativacaoCPF').value;
-  const cpfNumeros = cpf.replace(/\D/g, '');
+async function fazerLoginCPF() {
+  const cpfInput = document.getElementById('loginCPF').value;
+  const cpf = unformatCPF(cpfInput);
+  const errorDiv = document.getElementById('loginError');
   
-  if (cpfNumeros.length !== 11) {
-    mostrarErro('ativacaoError', 'CPF inválido!');
+  if (cpf.length !== 11) {
+    errorDiv.textContent = 'CPF inválido!';
+    errorDiv.style.display = 'block';
     return;
   }
   
-  document.getElementById('cpfConfirmado').textContent = cpf;
-  document.getElementById('cadCPF').value = cpf;
-  document.getElementById('ativacaoEtapa1').style.display = 'none';
-  document.getElementById('ativacaoEtapa2').style.display = 'block';
-  document.getElementById('ativacaoError').style.display = 'none';
-}
-
-// VOLTAR PARA ETAPA 1
-function voltarEtapa1() {
-  document.getElementById('ativacaoEtapa1').style.display = 'block';
-  document.getElementById('ativacaoEtapa2').style.display = 'none';
-}
-
-// VOLTAR AO LOGIN
-function voltarLogin() {
-  mostrarTela('loginScreen');
-}
-
-// ATIVAR SISTEMA
-async function ativarSistema() {
-  const cpf = document.getElementById('ativacaoCPF').value;
-  const codigo = document.getElementById('ativacaoCodigo').value.toUpperCase().trim();
-  const cpfNumeros = cpf.replace(/\D/g, '');
+  errorDiv.style.display = 'none';
   
-  // Validação
-  if (!codigo.match(/^AA[A-Z0-9]{6}$/)) {
-    mostrarErro('ativacaoError', 'Código inválido! Use formato AA000000');
+  try {
+    // Buscar profissional pelo CPF
+    const snapshot = await database.ref('profissionais').orderByChild('cpf').equalTo(cpf).once('value');
+    const profissionais = snapshot.val();
+    
+    if (!profissionais) {
+      errorDiv.textContent = 'CPF não encontrado. Faça a ativação primeiro.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    
+    // Pegar o primeiro profissional encontrado (deve ser único por CPF)
+    const profissionalId = Object.keys(profissionais)[0];
+    const profissional = profissionais[profissionalId];
+    
+    // Buscar dados da clínica
+    const clinicaSnapshot = await database.ref('clinicas/' + profissional.clinicaId).once('value');
+    const clinica = clinicaSnapshot.val();
+    
+    if (!clinica) {
+      errorDiv.textContent = 'Erro ao carregar dados da clínica.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    
+    // Verificar se código está ativo
+    if (!clinica.ativa) {
+      errorDiv.textContent = 'Código de ativação expirado. Entre em contato com o suporte.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    
+    // Login bem-sucedido
+    currentUser = profissional;
+    currentClinica = clinica;
+    currentProfissional = profissionalId;
+    isAdmin = false;
+    
+    // Salvar sessão
+    localStorage.setItem('asm_session', JSON.stringify({
+      profissionalId: profissionalId,
+      clinicaId: profissional.clinicaId,
+      cpf: cpf,
+      timestamp: Date.now()
+    }));
+    
+    // Entrar no sistema
+    entrarSistema();
+    
+  } catch (error) {
+    console.error('Erro no login:', error);
+    errorDiv.textContent = 'Erro ao conectar. Tente novamente.';
+    errorDiv.style.display = 'block';
+  }
+}
+
+async function loginAdmin() {
+  const email = document.getElementById('adminEmail').value;
+  const senha = document.getElementById('adminSenha').value;
+  const errorDiv = document.getElementById('loginError');
+  
+  if (email === ADMIN_EMAIL && senha === ADMIN_SENHA) {
+    isAdmin = true;
+    currentUser = { nome: 'Administrador', email: email };
+    currentClinica = null;
+    currentProfissional = null;
+    
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainSystem').style.display = 'block';
+    document.getElementById('btnAdmin').classList.add('visible');
+    
+    showSection('admin');
+    carregarDadosAdmin();
+  } else {
+    errorDiv.textContent = 'E-mail ou senha incorretos!';
+    errorDiv.style.display = 'block';
+  }
+}
+
+async function verificarCPFAtivacao() {
+  const cpfInput = document.getElementById('ativacaoCPF').value;
+  const cpf = unformatCPF(cpfInput);
+  const errorDiv = document.getElementById('ativacaoError');
+  
+  if (cpf.length !== 11) {
+    errorDiv.textContent = 'CPF inválido! Digite 11 números.';
+    errorDiv.style.display = 'block';
     return;
   }
   
   document.getElementById('ativacaoLoading').style.display = 'block';
+  errorDiv.style.display = 'none';
   
   try {
-    const codeRef = database.ref('activationCodes/' + codigo);
-    const snapshot = await codeRef.once('value');
+    // Verificar se CPF já existe como profissional
+    const profSnapshot = await database.ref('profissionais').orderByChild('cpf').equalTo(cpf).once('value');
+    const profissionalExistente = profSnapshot.val();
     
-    if (!snapshot.exists()) {
-      mostrarErro('ativacaoError', 'Código não encontrado!');
+    if (profissionalExistente) {
+      // CPF já cadastrado - permitir login direto
       document.getElementById('ativacaoLoading').style.display = 'none';
+      document.getElementById('ativacaoSuccess').textContent = 'CPF já cadastrado! Redirecionando...';
+      document.getElementById('ativacaoSuccess').style.display = 'block';
+      
+      setTimeout(() => {
+        fazerLoginCPF();
+      }, 1500);
       return;
     }
     
-    const codeData = snapshot.val();
-    
-    // CORREÇÃO: Se código já usado, verifica se é pelo mesmo CPF
-    if (codeData.used) {
-      if (codeData.cpf === cpfNumeros) {
-        // Mesmo CPF, permite login
-        await carregarDadosProfissional(cpfNumeros, codigo);
-      } else {
-        // CPF diferente, registra tentativa de burla
-        await database.ref('tentativasBurla').push({
-          data: new Date().toISOString(),
-          cpfTentativa: cpfNumeros,
-          codigo: codigo,
-          cpfOriginal: codeData.cpf
-        });
-        mostrarErro('ativacaoError', 'Este código já foi usado por outro CPF!');
-      }
-      document.getElementById('ativacaoLoading').style.display = 'none';
-      return;
-    }
-    
-    // Verificar limite de 4 profissionais por código
-    const ativacoesSnapshot = await database.ref('activationCodes').orderByChild('cpf').equalTo(cpfNumeros).once('value');
-    let count = 0;
-    ativacoesSnapshot.forEach(() => { count++; });
-    
-    if (count >= 4) {
-      mostrarErro('ativacaoError', 'Limite de 4 profissionais atingido para este CPF!');
-      document.getElementById('ativacaoLoading').style.display = 'none';
-      return;
-    }
-    
-    // Marcar código como usado
-    await codeRef.update({
-      used: true,
-      cpf: cpfNumeros,
-      activatedAt: new Date().toISOString()
-    });
-    
-    // Ir para cadastro de profissional
+    // CPF novo - prosseguir para etapa 2
+    document.getElementById('cpfConfirmado').textContent = formatCPF(cpf);
+    document.getElementById('cadCPF').value = formatCPF(cpf);
     document.getElementById('ativacaoLoading').style.display = 'none';
-    mostrarTela('cadastroScreen');
+    document.getElementById('ativacaoEtapa1').style.display = 'none';
+    document.getElementById('ativacaoEtapa2').style.display = 'block';
     
   } catch (error) {
-    mostrarErro('ativacaoError', 'Erro: ' + error.message);
+    console.error('Erro:', error);
     document.getElementById('ativacaoLoading').style.display = 'none';
+    errorDiv.textContent = 'Erro ao verificar CPF. Tente novamente.';
+    errorDiv.style.display = 'block';
   }
 }
 
-// SALVAR CADASTRO DE PROFISSIONAL
-async function salvarCadastroProfissional() {
-  const nome = document.getElementById('cadNome').value.trim();
-  const cpf = document.getElementById('cadCPF').value;
-  const especialidade = document.getElementById('cadEspecialidade').value;
-  const pix = document.getElementById('cadPix').value.trim();
-  const codigo = document.getElementById('ativacaoCodigo').value.toUpperCase();
+async function ativarSistema() {
+  const cpf = unformatCPF(document.getElementById('cpfConfirmado').textContent);
+  const codigo = document.getElementById('ativacaoCodigo').value.toUpperCase().trim();
+  const errorDiv = document.getElementById('ativacaoError');
+  const loadingDiv = document.getElementById('ativacaoLoading');
   
-  if (!nome || !especialidade) {
-    mostrarErro('cadastroError', 'Preencha nome e especialidade!');
+  if (codigo.length < 8) {
+    errorDiv.textContent = 'Código inválido! Digite o código completo.';
+    errorDiv.style.display = 'block';
     return;
   }
   
-  const profissional = {
-    id: Date.now().toString(),
-    nome: nome,
-    cpf: cpf.replace(/\D/g, ''),
-    especialidade: especialidade,
-    pix: pix,
-    codigoAtivacao: codigo,
-    dataCadastro: new Date().toISOString(),
-    tiposConsulta: tiposConsulta
-  };
+  loadingDiv.style.display = 'block';
+  errorDiv.style.display = 'none';
   
   try {
-    await database.ref('profissionais/' + profissional.id).set(profissional);
-    await carregarDadosProfissional(profissional.cpf, codigo);
-  } catch (error) {
-    mostrarErro('cadastroError', 'Erro ao salvar: ' + error.message);
-  }
-}
-
-// CARREGAR DADOS DO PROFISSIONAL
-async function carregarDadosProfissional(cpf, codigo) {
-  try {
-    // Buscar profissional
-    const snapshot = await database.ref('profissionais').orderByChild('cpf').equalTo(cpf).once('value');
-    if (!snapshot.exists()) {
-      mostrarErro('loginError', 'Profissional não encontrado!');
+    // Verificar código no Firebase
+    const codeSnapshot = await database.ref('codigos/' + codigo).once('value');
+    const codeData = codeSnapshot.val();
+    
+    if (!codeData) {
+      loadingDiv.style.display = 'none';
+      errorDiv.textContent = 'Código não encontrado!';
+      errorDiv.style.display = 'block';
       return;
     }
     
-    const profData = snapshot.val();
-    const profId = Object.keys(profData)[0];
-    currentProfissional = profData[profId];
-    
-    // Carregar tipos de consulta personalizados
-    if (currentProfissional.tiposConsulta) {
-      tiposConsulta = currentProfissional.tiposConsulta;
+    // Verificar se código já foi usado
+    if (codeData.usado) {
+      // Código já usado - verificar se é o mesmo CPF tentando entrar novamente
+      const clinicaSnapshot = await database.ref('clinicas/' + codeData.clinicaId).once('value');
+      const clinica = clinicaSnapshot.val();
+      
+      if (clinica && clinica.profissionais) {
+        const profissionais = Object.values(clinica.profissionais);
+        const cpfJaCadastrado = profissionais.some(p => p.cpf === cpf);
+        
+        if (!cpfJaCadastrado) {
+          // CPF diferente tentando usar código já ativado - BURLA!
+          loadingDiv.style.display = 'none';
+          errorDiv.textContent = 'Código já utilizado por outro profissional. Entre em contato com o suporte.';
+          errorDiv.style.display = 'block';
+          
+          // Registrar tentativa de burla
+          await database.ref('tentativasBurla').push({
+            codigo: codigo,
+            cpfTentativa: cpf,
+            data: new Date().toISOString(),
+            clinicaId: codeData.clinicaId
+          });
+          return;
+        }
+        
+        // Mesmo CPF - permitir login
+        loadingDiv.style.display = 'none';
+        document.getElementById('ativacaoSuccess').textContent = 'Código reconhecido! Redirecionando...';
+        document.getElementById('ativacaoSuccess').style.display = 'block';
+        
+        setTimeout(() => {
+          fazerLoginCPF();
+        }, 1500);
+        return;
+      }
     }
+    
+    // Código válido e não usado - criar clínica e profissional
+    const clinicaId = generateId();
+    const profissionalId = generateId();
+    
+    // Criar clínica
+    await database.ref('clinicas/' + clinicaId).set({
+      id: clinicaId,
+      codigo: codigo,
+      ativa: true,
+      dataAtivacao: new Date().toISOString(),
+      limiteProfissionais: 4,
+      profissionais: {
+        [profissionalId]: {
+          id: profissionalId,
+          cpf: cpf,
+          dataCadastro: new Date().toISOString()
+        }
+      }
+    });
+    
+    // Marcar código como usado
+    await database.ref('codigos/' + codigo).update({
+      usado: true,
+      clinicaId: clinicaId,
+      dataUso: new Date().toISOString()
+    });
+    
+    // Guardar IDs para cadastro
+    window.tempClinicaId = clinicaId;
+    window.tempProfissionalId = profissionalId;
+    window.tempCPF = cpf;
+    
+    loadingDiv.style.display = 'none';
+    document.getElementById('ativacaoSuccess').textContent = 'Código válido! Complete seu cadastro.';
+    document.getElementById('ativacaoSuccess').style.display = 'block';
+    
+    setTimeout(() => {
+      document.getElementById('activationScreen').style.display = 'none';
+      document.getElementById('cadastroScreen').style.display = 'flex';
+    }, 1000);
+    
+  } catch (error) {
+    console.error('Erro na ativação:', error);
+    loadingDiv.style.display = 'none';
+    errorDiv.textContent = 'Erro ao ativar. Tente novamente.';
+    errorDiv.style.display = 'block';
+  }
+}
+
+async function salvarCadastroProfissional() {
+  const nome = document.getElementById('cadNome').value.trim();
+  const especialidade = document.getElementById('cadEspecialidade').value;
+  const registro = document.getElementById('cadRegistro').value.trim();
+  const pix = document.getElementById('cadPix').value.trim();
+  const errorDiv = document.getElementById('cadastroError');
+  
+  if (!nome || !especialidade || !registro) {
+    errorDiv.textContent = 'Preencha todos os campos obrigatórios!';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  try {
+    const profissionalData = {
+      id: window.tempProfissionalId,
+      nome: nome,
+      cpf: window.tempCPF,
+      especialidade: especialidade,
+      registro: registro,
+      pix: pix,
+      clinicaId: window.tempClinicaId,
+      dataCadastro: new Date().toISOString()
+    };
+    
+    // Salvar profissional
+    await database.ref('profissionais/' + window.tempProfissionalId).set(profissionalData);
+    
+    // Atualizar na clínica
+    await database.ref('clinicas/' + window.tempClinicaId + '/profissionais/' + window.tempProfissionalId).update({
+      nome: nome,
+      especialidade: especialidade,
+      registro: registro
+    });
+    
+    // Login automático
+    currentUser = profissionalData;
+    currentClinica = { id: window.tempClinicaId, codigo: 'N/A' };
+    currentProfissional = window.tempProfissionalId;
+    isAdmin = false;
     
     // Salvar sessão
-    localStorage.setItem('asm_cpf', cpf);
-    localStorage.setItem('asm_codigo', codigo);
+    localStorage.setItem('asm_session', JSON.stringify({
+      profissionalId: window.tempProfissionalId,
+      clinicaId: window.tempClinicaId,
+      cpf: window.tempCPF,
+      timestamp: Date.now()
+    }));
     
-    // Mostrar sistema
-    isAdmin = false;
-    currentUser = { tipo: 'profissional', cpf: cpf };
-    mostrarTela('mainSystem');
-    document.getElementById('btnAdmin').classList.remove('visible');
-    
-    // Atualizar header
-    const config = professionConfig[currentProfissional.especialidade] || { name: 'Profissional', registry: 'Registro' };
-    document.getElementById('currentUserName').textContent = currentProfissional.nome;
-    document.getElementById('currentUserEspecialidade').textContent = config.name;
-    document.getElementById('currentUserRegistry').textContent = currentProfissional.pix ? 'Pix cadastrado' : '---';
-    document.getElementById('headerSubtitle').textContent = currentProfissional.nome + ' - ' + config.name;
-    
-    await inicializarSistema();
+    document.getElementById('cadastroScreen').style.display = 'none';
+    entrarSistema();
     
   } catch (error) {
-    console.error('Erro ao carregar:', error);
+    console.error('Erro ao salvar:', error);
+    errorDiv.textContent = 'Erro ao salvar cadastro. Tente novamente.';
+    errorDiv.style.display = 'block';
   }
 }
 
-// INICIALIZAR SISTEMA
-async function inicializarSistema() {
-  await carregarDadosFirebase();
-  renderizarAgenda();
-  renderizarPacientes();
-  atualizarResumoFinanceiro();
-  carregarSelectTipos();
+function atualizarLabelRegistro() {
+  const esp = document.getElementById('cadEspecialidade').value;
+  const labels = {
+    'fisioterapia': 'CREFITO *',
+    'medicina': 'CRM *',
+    'nutricao': 'CRN *',
+    'psicologia': 'CRP *',
+    'fonoaudiologia': 'CRFa *',
+    'terapia_ocupacional': 'CREFITO *',
+    'estetica': 'Registro Profissional *',
+    'enfermagem': 'COREN *',
+    'odontologia': 'CRO *',
+    'educacao_fisica': 'CREF *'
+  };
+  document.querySelector('#cadastroScreen #labelRegistro').textContent = labels[esp] || 'Registro Profissional *';
+}
+
+function logout() {
+  localStorage.removeItem('asm_session');
+  currentUser = null;
+  currentClinica = null;
+  currentProfissional = null;
+  isAdmin = false;
+  location.reload();
+}
+
+// ==========================================
+// ENTRADA NO SISTEMA
+// ==========================================
+
+async function entrarSistema() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('activationScreen').style.display = 'none';
+  document.getElementById('cadastroScreen').style.display = 'none';
+  document.getElementById('mainSystem').style.display = 'block';
   
-  const hoje = new Date().toISOString().slice(0, 7);
-  document.getElementById('cashFlowMonth').value = hoje;
-  document.getElementById('reportMonth').value = hoje;
+  // Atualizar header
+  document.getElementById('currentUserName').textContent = currentUser.nome;
+  document.getElementById('currentUserEspecialidade').textContent = getEspecialidadeNome(currentUser.especialidade);
+  document.getElementById('currentUserRegistry').textContent = currentUser.registro || '---';
   
-  if (isAdmin) {
-    carregarPainelAdmin();
+  // Verificar se é multiclinica (mais de 1 profissional)
+  await verificarMulticlinica();
+  
+  // Carregar dados iniciais
+  showSection('agenda');
+  initCalendar();
+  renderCalendar();
+  renderPatients();
+  renderFinancial();
+  renderCashFlow();
+  renderReports();
+  renderDashboard();
+  loadConfiguracoes();
+}
+
+async function verificarMulticlinica() {
+  if (!currentClinica || !currentClinica.id) return;
+  
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/profissionais').once('value');
+  const profissionais = snapshot.val();
+  
+  if (profissionais) {
+    const lista = Object.values(profissionais);
+    if (lista.length > 1) {
+      // Mostrar seleção de profissional
+      const container = document.getElementById('selecaoProfissional');
+      const listaDiv = document.getElementById('listaProfissionaisClinica');
+      
+      listaDiv.innerHTML = lista.map(p => `
+        <div class="profissional-item ${p.id === currentProfissional ? 'ativo' : ''}" onclick="trocarProfissional('${p.id}')">
+          <div>
+            <strong>${p.nome}</strong><br>
+            <small>${getEspecialidadeNome(p.especialidade)} - ${p.registro}</small>
+          </div>
+          ${p.id === currentProfissional ? '<span style="color:#38a169">✓ Ativo</span>' : '<span style="color:#718096">Clique para trocar</span>'}
+        </div>
+      `).join('');
+      
+      container.style.display = 'block';
+    }
   }
 }
 
-// CARREGAR DADOS DO FIREBASE
-async function carregarDadosFirebase() {
-  try {
-    const path = isAdmin ? '' : 'profissionais/' + currentProfissional.id + '/';
+async function trocarProfissional(profissionalId) {
+  if (profissionalId === currentProfissional) return;
+  
+  const snapshot = await database.ref('profissionais/' + profissionalId).once('value');
+  const profissional = snapshot.val();
+  
+  if (profissional) {
+    currentUser = profissional;
+    currentProfissional = profissionalId;
     
-    const [pacSnap, agendSnap, evoSnap, despSnap] = await Promise.all([
-      database.ref(path + 'pacientes').once('value'),
-      database.ref(path + 'agendamentos').once('value'),
-      database.ref(path + 'evolucoes').once('value'),
-      database.ref(path + 'despesas').once('value')
-    ]);
+    // Atualizar sessão
+    localStorage.setItem('asm_session', JSON.stringify({
+      profissionalId: profissionalId,
+      clinicaId: profissional.clinicaId,
+      cpf: profissional.cpf,
+      timestamp: Date.now()
+    }));
     
-    pacientes = pacSnap.val() ? Object.values(pacSnap.val()) : [];
-    agendamentos = agendSnap.val() ? Object.values(agendSnap.val()) : [];
-    evolucoes = evoSnap.val() ? Object.values(evoSnap.val()) : [];
-    despesas = despSnap.val() ? Object.values(despSnap.val()) : [];
+    // Atualizar interface
+    document.getElementById('currentUserName').textContent = profissional.nome;
+    document.getElementById('currentUserEspecialidade').textContent = getEspecialidadeNome(profissional.especialidade);
+    document.getElementById('currentUserRegistry').textContent = profissional.registro || '---';
     
-  } catch (error) {
-    console.error('Erro ao carregar dados:', error);
+    await verificarMulticlinica();
+    renderCalendar();
+    renderFinancial();
+    renderDashboard();
   }
 }
 
-// SALVAR DADOS NO FIREBASE
-async function salvarDados() {
-  try {
-    const path = 'profissionais/' + currentProfissional.id + '/';
-    await Promise.all([
-      database.ref(path + 'pacientes').set(pacientes.reduce((acc, p) => { acc[p.id] = p; return acc; }, {})),
-      database.ref(path + 'agendamentos').set(agendamentos.reduce((acc, a) => { acc[a.id] = a; return acc; }, {})),
-      database.ref(path + 'evolucoes').set(evolucoes.reduce((acc, e) => { acc[e.id] = e; return acc; }, {})),
-      database.ref(path + 'despesas').set(despesas.reduce((acc, d) => { acc[d.id] = d; return acc; }, {}))
-    ]);
-    return true;
-  } catch (error) {
-    alert('Erro ao salvar: ' + error.message);
-    return false;
-  }
+function getEspecialidadeNome(esp) {
+  const nomes = {
+    'fisioterapia': 'Fisioterapia',
+    'medicina': 'Medicina',
+    'nutricao': 'Nutrição',
+    'psicologia': 'Psicologia',
+    'fonoaudiologia': 'Fonoaudiologia',
+    'terapia_ocupacional': 'Terapia Ocupacional',
+    'estetica': 'Estética',
+    'enfermagem': 'Enfermagem',
+    'odontologia': 'Odontologia',
+    'educacao_fisica': 'Educação Física'
+  };
+  return nomes[esp] || esp;
 }
 
-// MOSTRAR SEÇÃO
-function showSection(section) {
+// ==========================================
+// NAVEGAÇÃO DE SEÇÕES
+// ==========================================
+
+function showSection(sectionId) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById(section).classList.add('active');
+  
+  document.getElementById(sectionId).classList.add('active');
   event.target.classList.add('active');
   
-  if (section === 'agenda') renderizarAgenda();
-  if (section === 'pacientes') renderizarPacientes();
-  if (section === 'financeiro') renderizarFinanceiro();
-  if (section === 'fluxo') renderizarFluxoCaixa();
-  if (section === 'painel') renderizarPainel();
-  if (section === 'relatorios') renderizarRelatorios();
-  if (section === 'configuracoes') carregarConfiguracoes();
-  if (section === 'admin') carregarPainelAdmin();
+  if (sectionId === 'painel') renderDashboard();
+  if (sectionId === 'admin' && isAdmin) carregarDadosAdmin();
 }
 
-// AGENDA
-function renderizarAgenda() {
-  const ano = currentDate.getFullYear();
-  const mes = currentDate.getMonth();
-  document.getElementById('currentMonth').textContent = new Date(ano, mes).toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
+function closeModal(modalId) {
+  document.getElementById(modalId).classList.remove('active');
+}
+
+// Fechar modal ao clicar fora
+window.onclick = function(event) {
+  if (event.target.classList.contains('modal')) {
+    event.target.classList.remove('active');
+  }
+}
+
+// ==========================================
+// CONFIGURAÇÕES
+// ==========================================
+
+async function loadConfiguracoes() {
+  if (!currentUser) return;
   
-  const primeiroDia = new Date(ano, mes, 1).getDay();
-  const diasNoMes = new Date(ano, mes + 1, 0).getDate();
-  const calendario = document.getElementById('calendar');
-  calendario.innerHTML = '';
+  document.getElementById('configName').value = currentUser.nome || '';
+  document.getElementById('configEspecialidade').value = currentUser.especialidade || 'fisioterapia';
+  document.getElementById('configRegistro').value = currentUser.registro || '';
+  document.getElementById('configPix').value = currentUser.pix || '';
   
-  const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  dias.forEach(dia => {
-    const div = document.createElement('div');
-    div.className = 'calendar-header';
-    div.textContent = dia;
-    calendario.appendChild(div);
+  atualizarLabelRegistroConfig();
+  await renderTiposConsulta();
+}
+
+function atualizarLabelRegistroConfig() {
+  const esp = document.getElementById('configEspecialidade').value;
+  const labels = {
+    'fisioterapia': 'CREFITO',
+    'medicina': 'CRM',
+    'nutricao': 'CRN',
+    'psicologia': 'CRP',
+    'fonoaudiologia': 'CRFa',
+    'terapia_ocupacional': 'CREFITO',
+    'estetica': 'Registro Profissional',
+    'enfermagem': 'COREN',
+    'odontologia': 'CRO',
+    'educacao_fisica': 'CREF'
+  };
+  document.getElementById('labelRegistroConfig').textContent = labels[esp] || 'Registro Profissional';
+}
+
+async function salvarConfiguracoes() {
+  const nome = document.getElementById('configName').value;
+  const especialidade = document.getElementById('configEspecialidade').value;
+  const registro = document.getElementById('configRegistro').value;
+  const pix = document.getElementById('configPix').value;
+  
+  if (!nome || !registro) {
+    alert('Preencha nome e registro profissional!');
+    return;
+  }
+  
+  try {
+    await database.ref('profissionais/' + currentProfissional).update({
+      nome: nome,
+      especialidade: especialidade,
+      registro: registro,
+      pix: pix
+    });
+    
+    // Atualizar local
+    currentUser.nome = nome;
+    currentUser.especialidade = especialidade;
+    currentUser.registro = registro;
+    currentUser.pix = pix;
+    
+    document.getElementById('currentUserName').textContent = nome;
+    document.getElementById('currentUserEspecialidade').textContent = getEspecialidadeNome(especialidade);
+    document.getElementById('currentUserRegistry').textContent = registro;
+    
+    alert('Configurações salvas com sucesso!');
+  } catch (error) {
+    alert('Erro ao salvar configurações');
+  }
+}
+
+// Tipos de consulta
+async function renderTiposConsulta() {
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/tiposConsulta').once('value');
+  const tipos = snapshot.val() || {};
+  
+  const container = document.getElementById('listaTiposConsulta');
+  container.innerHTML = Object.entries(tipos).map(([id, tipo]) => `
+    <div class="tipo-item">
+      <div>
+        <strong>${tipo.nome}</strong><br>
+        <small>${formatCurrency(tipo.valor)}</small>
+      </div>
+      <button class="btn btn-danger" onclick="removerTipoConsulta('${id}')" style="padding:5px 10px">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function adicionarTipoConsulta() {
+  const nome = document.getElementById('novoTipoNome').value.trim();
+  const valor = parseFloat(document.getElementById('novoTipoValor').value) || 0;
+  
+  if (!nome) {
+    alert('Digite o nome do tipo de atendimento!');
+    return;
+  }
+  
+  const id = generateId();
+  await database.ref('clinicas/' + currentClinica.id + '/tiposConsulta/' + id).set({
+    nome: nome,
+    valor: valor
   });
   
-  for (let i = 0; i < primeiroDia; i++) { 
-    calendario.appendChild(document.createElement('div')); 
+  document.getElementById('novoTipoNome').value = '';
+  document.getElementById('novoTipoValor').value = '';
+  await renderTiposConsulta();
+}
+
+async function removerTipoConsulta(id) {
+  if (confirm('Remover este tipo de atendimento?')) {
+    await database.ref('clinicas/' + currentClinica.id + '/tiposConsulta/' + id).remove();
+    await renderTiposConsulta();
   }
-  
-  const hoje = new Date();
-  for (let dia = 1; dia <= diasNoMes; dia++) {
-    const div = document.createElement('div');
-    div.className = 'calendar-day';
-    div.innerHTML = '<strong>' + dia + '</strong>';
-    
-    if (ano === hoje.getFullYear() && mes === hoje.getMonth() && dia === hoje.getDate()) {
-      div.style.background = '#1e3a5f'; 
-      div.style.color = 'white';
-    }
-    
-    const agendamentosDia = agendamentos.filter(a => {
-      if (a.cancelado) return false;
-      const dataA = new Date(a.data);
-      return dataA.getDate() === dia && dataA.getMonth() === mes && dataA.getFullYear() === ano;
-    });
-    
-    agendamentosDia.forEach(agend => {
-      const paciente = pacientes.find(p => p.id === agend.pacienteId);
-      const agendDiv = document.createElement('div');
-      agendDiv.className = 'appointment';
-      agendDiv.innerHTML = '<span>' + agend.hora + ' ' + (paciente ? paciente.nome.split(' ')[0] : '') + '</span>';
-      agendDiv.onclick = (e) => { e.stopPropagation(); editarAgendamento(agend.id); };
-      div.appendChild(agendDiv);
-    });
-    
-    div.onclick = () => abrirModalAgendamento(ano, mes, dia);
-    calendario.appendChild(div);
-  }
+}
+
+// ==========================================
+// AGENDA COMPARTILHADA
+// ==========================================
+
+function initCalendar() {
+  renderCalendar();
 }
 
 function changeMonth(delta) {
-  currentDate.setMonth(currentDate.getMonth() + delta);
-  renderizarAgenda();
+  currentMonth.setMonth(currentMonth.getMonth() + delta);
+  renderCalendar();
 }
 
-// MODAL AGENDAMENTO
-function abrirModalAgendamento(ano, mes, dia) {
-  currentApptId = null;
-  document.getElementById('apptPatient').value = '';
+async function renderCalendar() {
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  
+  document.getElementById('currentMonth').textContent = 
+    currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startDay = firstDay.getDay();
+  
+  const calendar = document.getElementById('calendar');
+  calendar.innerHTML = '';
+  
+  // Cabeçalhos
+  const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  days.forEach(day => {
+    const div = document.createElement('div');
+    div.className = 'calendar-header';
+    div.textContent = day;
+    calendar.appendChild(div);
+  });
+  
+  // Espaços vazios
+  for (let i = 0; i < startDay; i++) {
+    const div = document.createElement('div');
+    div.style.background = '#f0f0f0';
+    calendar.appendChild(div);
+  }
+  
+  // Dias
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Buscar agendamentos da clínica inteira (compartilhado)
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/agendamentos').once('value');
+  const appointments = snapshot.val() || {};
+  
+  for (let day = 1; day <= lastDay.getDate(); day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const div = document.createElement('div');
+    div.className = 'calendar-day';
+    if (dateStr === today) div.style.background = '#ebf8ff';
+    
+    div.innerHTML = `<strong>${day}</strong>`;
+    
+    // Filtrar agendamentos do dia
+    const dayAppointments = Object.entries(appointments).filter(([_, apt]) => apt.date === dateStr);
+    
+    dayAppointments.forEach(([id, apt]) => {
+      const aptDiv = document.createElement('div');
+      aptDiv.className = 'appointment';
+      if (apt.status === 'cancelled') aptDiv.classList.add('cancelled');
+      
+      // Mostrar nome do profissional também
+      const profNome = apt.profissionalNome ? apt.profissionalNome.split(' ')[0] : '';
+      
+      aptDiv.innerHTML = `
+        <span>${apt.time} - ${apt.patientName}</span>
+        ${profNome ? `<span class="profissional-tag">${profNome}</span>` : ''}
+      `;
+      aptDiv.onclick = (e) => {
+        e.stopPropagation();
+        openAppointmentModal(id);
+      };
+      div.appendChild(aptDiv);
+    });
+    
+    div.onclick = () => openAppointmentModal(null, dateStr);
+    calendar.appendChild(div);
+  }
+}
+
+// 
+
+// ==========================================
+// PARTE 3 - FUNÇÕES RESTANTES
+// ==========================================
+
+// ==========================================
+// MODAL DE AGENDAMENTO
+// ==========================================
+
+async function openAppointmentModal(appointmentId = null, dateStr = null) {
+  const modal = document.getElementById('appointmentModal');
+  const patientSelect = document.getElementById('apptPatient');
+  const typeSelect = document.getElementById('apptType');
+  
+  // Limpar campos
+  document.getElementById('apptDate').value = dateStr || '';
   document.getElementById('apptTime').value = '';
   document.getElementById('apptValue').value = '';
   document.getElementById('apptNotes').value = '';
   document.getElementById('apptRecorrente').checked = false;
   document.getElementById('recorrenciaBox').classList.add('hidden');
-  document.getElementById('btnWhatsAppt').style.display = 'none';
+  document.querySelectorAll('.dia-rec').forEach(d => d.checked = false);
   
-  if (ano !== undefined) {
-    document.getElementById('apptDate').value = ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+  // Carregar pacientes
+  const patientsSnapshot = await database.ref('clinicas/' + currentClinica.id + '/pacientes').once('value');
+  const patients = patientsSnapshot.val() || {};
+  
+  patientSelect.innerHTML = '<option value="">Selecione...</option>' +
+    Object.entries(patients).map(([id, p]) => `<option value="${id}">${p.name}</option>`).join('');
+  
+  // Carregar tipos de consulta
+  const tiposSnapshot = await database.ref('clinicas/' + currentClinica.id + '/tiposConsulta').once('value');
+  const tipos = tiposSnapshot.val() || {};
+  
+  typeSelect.innerHTML = '<option value="">Personalizado</option>' +
+    Object.entries(tipos).map(([id, t]) => `<option value="${id}" data-valor="${t.valor}">${t.nome} - ${formatCurrency(t.valor)}</option>`).join('');
+  
+  if (appointmentId) {
+    // Editar agendamento existente
+    const aptSnapshot = await database.ref('clinicas/' + currentClinica.id + '/agendamentos/' + appointmentId).once('value');
+    const apt = aptSnapshot.val();
+    
+    if (apt) {
+      document.getElementById('apptPatient').value = apt.patientId;
+      document.getElementById('apptDate').value = apt.date;
+      document.getElementById('apptTime').value = apt.time;
+      document.getElementById('apptValue').value = apt.value || '';
+      document.getElementById('apptNotes').value = apt.notes || '';
+      document.getElementById('btnWhatsAppt').style.display = 'inline-block';
+      document.getElementById('btnWhatsAppt').onclick = () => sendAppointmentWhatsApp(apt);
+      
+      modal.dataset.editingId = appointmentId;
+    }
   } else {
-    document.getElementById('apptDate').value = new Date().toISOString().split('T')[0];
+    modal.dataset.editingId = '';
+    document.getElementById('btnWhatsAppt').style.display = 'none';
   }
   
-  carregarSelectPacientes();
-  document.getElementById('appointmentModal').classList.add('active');
-}
-
-function carregarSelectPacientes() {
-  const select = document.getElementById('apptPatient');
-  select.innerHTML = '<option value="">Selecione...</option>';
-  pacientes.sort((a, b) => a.nome.localeCompare(b.nome)).forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.id; 
-    opt.textContent = p.nome;
-    select.appendChild(opt);
-  });
-}
-
-function carregarSelectTipos() {
-  const select = document.getElementById('apptType');
-  select.innerHTML = '';
-  tiposConsulta.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t.id;
-    opt.textContent = t.nome + ' - R$ ' + t.valor;
-    select.appendChild(opt);
-  });
-}
-
-function atualizarValorAgendamento() {
-  const tipoId = document.getElementById('apptType').value;
-  const tipo = tiposConsulta.find(t => t.id === tipoId);
-  if (tipo) {
-    document.getElementById('apptValue').value = tipo.valor;
-  }
+  modal.classList.add('active');
 }
 
 function toggleRecorrencia() {
   const checkbox = document.getElementById('apptRecorrente');
-  document.getElementById('recorrenciaBox').classList.toggle('hidden', !checkbox.checked);
+  const box = document.getElementById('recorrenciaBox');
+  
+  if (checkbox.checked) {
+    box.classList.remove('hidden');
+  } else {
+    box.classList.add('hidden');
+  }
 }
 
-// SALVAR AGENDAMENTO (COM RECORRÊNCIA)
-async function saveAppointment() {
-  const pacienteId = document.getElementById('apptPatient').value;
-  const data = document.getElementById('apptDate').value;
-  const hora = document.getElementById('apptTime').value;
-  const tipoId = document.getElementById('apptType').value;
-  const valor = document.getElementById('apptValue').value;
-  const recorrente = document.getElementById('apptRecorrente').checked;
+function atualizarValorAgendamento() {
+  const select = document.getElementById('apptType');
+  const selected = select.options[select.selectedIndex];
+  const valor = selected.dataset.valor;
   
-  if (!pacienteId || !data || !hora) {
+  if (valor) {
+    document.getElementById('apptValue').value = valor;
+  }
+}
+
+async function saveAppointment() {
+  const patientId = document.getElementById('apptPatient').value;
+  const date = document.getElementById('apptDate').value;
+  const time = document.getElementById('apptTime').value;
+  const value = parseFloat(document.getElementById('apptValue').value) || 0;
+  const notes = document.getElementById('apptNotes').value;
+  const isRecorrente = document.getElementById('apptRecorrente').checked;
+  const editingId = document.getElementById('appointmentModal').dataset.editingId;
+  
+  if (!patientId || !date || !time) {
     alert('Preencha paciente, data e horário!');
     return;
   }
   
-  const paciente = pacientes.find(p => p.id === pacienteId);
-  const tipo = tiposConsulta.find(t => t.id === tipoId) || tiposConsulta[0];
+  // Buscar dados do paciente
+  const patientSnapshot = await database.ref('clinicas/' + currentClinica.id + '/pacientes/' + patientId).once('value');
+  const patient = patientSnapshot.val();
   
-  function criarAgendamento(dataAgendamento) {
-    return {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      pacienteId: pacienteId,
-      pacienteNome: paciente ? paciente.nome : '',
-      data: dataAgendamento,
-      hora: hora,
-      tipo: tipoId,
-      tipoNome: tipo.nome,
-      valor: parseFloat(valor) || tipo.valor,
-      observacoes: document.getElementById('apptNotes').value,
-      pago: false,
-      cancelado: false,
-      formaPagamento: null
-    };
-  }
+  const appointmentData = {
+    patientId: patientId,
+    patientName: patient.name,
+    patientPhone: patient.phone,
+    date: date,
+    time: time,
+    value: value,
+    notes: notes,
+    profissionalId: currentProfissional,
+    profissionalNome: currentUser.nome,
+    status: 'scheduled',
+    updatedAt: new Date().toISOString()
+  };
   
-  // Agendamento principal
-  agendamentos.push(criarAgendamento(data));
-  
-  // Se recorrente, criar os próximos
-  if (recorrente) {
-    const diasSelecionados = Array.from(document.querySelectorAll('.dia-rec:checked')).map(cb => parseInt(cb.value));
-    const semanas = parseInt(document.getElementById('semanasRecorrencia').value) || 4;
-    const dataInicial = new Date(data);
-    
-    for (let s = 1; s <= semanas; s++) {
-      diasSelecionados.forEach(diaSemana => {
-        const novaData = new Date(dataInicial);
-        const diasParaAdicionar = (s * 7) + (diaSemana - dataInicial.getDay());
-        novaData.setDate(novaData.getDate() + diasParaAdicionar);
-        
-        if (novaData > dataInicial) {
-          agendamentos.push(criarAgendamento(novaData.toISOString().split('T')[0]));
-        }
+  try {
+    if (editingId) {
+      // Atualizar existente
+      await database.ref('clinicas/' + currentClinica.id + '/agendamentos/' + editingId).update(appointmentData);
+    } else {
+      // Criar novo
+      const newId = generateId();
+      await database.ref('clinicas/' + currentClinica.id + '/agendamentos/' + newId).set({
+        ...appointmentData,
+        id: newId,
+        createdAt: new Date().toISOString()
       });
+      
+      // Se recorrente, criar próximos agendamentos
+      if (isRecorrente) {
+        const diasSelecionados = Array.from(document.querySelectorAll('.dia-rec:checked')).map(d => parseInt(d.value));
+        const semanas = parseInt(document.getElementById('semanasRecorrencia').value) || 4;
+        
+        if (diasSelecionados.length > 0) {
+          const dataBase = new Date(date);
+          
+          for (let semana = 1; semana <= semanas; semana++) {
+            diasSelecionados.forEach(diaSemana => {
+              const novaData = new Date(dataBase);
+              novaData.setDate(dataBase.getDate() + (semana * 7) + (diaSemana - dataBase.getDay()));
+              
+              const dataStr = novaData.toISOString().split('T')[0];
+              const recId = generateId();
+              
+              database.ref('clinicas/' + currentClinica.id + '/agendamentos/' + recId).set({
+                ...appointmentData,
+                id: recId,
+                date: dataStr,
+                createdAt: new Date().toISOString(),
+                recorrente: true,
+                grupoRecorrencia: newId
+              });
+            });
+          }
+        }
+      }
     }
-  }
-  
-  await salvarDados();
-  closeModal('appointmentModal');
-  renderizarAgenda();
-  atualizarResumoFinanceiro();
-  alert('Agendamento salvo com sucesso!');
-}
-
-function editarAgendamento(id) {
-  const agend = agendamentos.find(a => a.id === id);
-  currentApptId = id;
-  
-  document.getElementById('apptPatient').value = agend.pacienteId;
-  document.getElementById('apptDate').value = agend.data;
-  document.getElementById('apptTime').value = agend.hora;
-  document.getElementById('apptType').value = agend.tipo;
-  document.getElementById('apptValue').value = agend.valor;
-  document.getElementById('apptNotes').value = agend.observacoes || '';
-  document.getElementById('btnWhatsAppt').style.display = 'inline-block';
-  
-  carregarSelectPacientes();
-  document.getElementById('appointmentModal').classList.add('active');
-}
-
-// PAGAMENTO COM FORMAS
-function abrirModalPagamento(id) {
-  currentPaymentId = id;
-  const agend = agendamentos.find(a => a.id === id);
-  
-  document.getElementById('paymentValor').textContent = 'R$ ' + parseFloat(agend.valor).toFixed(2);
-  document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
-  document.getElementById('formaPagamentoSelecionada').value = '';
-  
-  document.getElementById('paymentModal').classList.add('active');
-}
-
-function selecionarPagamento(forma) {
-  document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
-  document.getElementById('pay' + forma).classList.add('selected');
-  document.getElementById('formaPagamentoSelecionada').value = forma;
-}
-
-async function confirmarPagamento() {
-  const forma = document.getElementById('formaPagamentoSelecionada').value;
-  if (!forma) {
-    alert('Selecione uma forma de pagamento!');
-    return;
-  }
-  
-  const agend = agendamentos.find(a => a.id === currentPaymentId);
-  agend.pago = true;
-  agend.formaPagamento = forma;
-  
-  await salvarDados();
-  closeModal('paymentModal');
-  renderizarFinanceiro();
-  renderizarAgenda();
-  atualizarResumoFinanceiro();
-  alert('Pagamento registrado: ' + forma);
-}
-
-// PACIENTES
-function renderizarPacientes() {
-  const lista = document.getElementById('patientsList');
-  lista.innerHTML = '';
-  
-  pacientes.forEach(p => {
-    const agendPaciente = agendamentos.filter(a => a.pacienteId === p.id && !a.cancelado);
-    const pendentes = agendPaciente.filter(a => !a.pago).length;
     
-    const card = document.createElement('div');
-    card.className = 'card';
-    let html = '<h3>' + p.nome + '</h3><p>📱 ' + p.telefone + '</p>';
-    if (p.valorPadrao) html += '<p>💰 R$ ' + parseFloat(p.valorPadrao).toFixed(2) + '</p>';
-    if (pendentes > 0) html += '<p style="color:#e53e3e">⚠️ ' + pendentes + ' pendente(s)</p>';
+    closeModal('appointmentModal');
+    renderCalendar();
+    renderFinancial();
     
-    card.innerHTML = html;
-    card.onclick = () => abrirModalPaciente(p.id);
-    lista.appendChild(card);
-  });
+  } catch (error) {
+    alert('Erro ao salvar agendamento');
+    console.error(error);
+  }
 }
 
-function searchPatients(termo) {
-  document.querySelectorAll('#patientsList .card').forEach(card => {
-    const nome = card.querySelector('h3').textContent.toLowerCase();
-    card.style.display = nome.includes(termo.toLowerCase()) ? 'block' : 'none';
-  });
-}
-
-function abrirModalPaciente(id) {
-  currentPatientId = id;
-  selectedSessions.clear();
-  
-  if (id) {
-    const p = pacientes.find(pac => pac.id === id);
-    document.getElementById('patientModalTitle').textContent = 'Editar Paciente';
-    document.getElementById('patientId').value = p.id;
-    document.getElementById('patientName').value = p.nome;
-    document.getElementById('patientPhone').value = p.telefone;
-    document.getElementById('patientEmail').value = p.email || '';
-    document.getElementById('patientValue').value = p.valorPadrao || '';
-    document.getElementById('patientComplaint').value = p.queixa || '';
-    document.getElementById('btnDeletePatient').style.display = 'block';
-    renderizarFinanceiroPaciente();
-    renderizarEvolucoes();
+function sendAppointmentWhatsApp(apt) {
+  if (!apt) {
+    const patientId = document.getElementById('apptPatient').value;
+    const date = document.getElementById('apptDate').value;
+    const time = document.getElementById('apptTime').value;
+    
+    database.ref('clinicas/' + currentClinica.id + '/pacientes/' + patientId).once('value').then(snap => {
+      const patient = snap.val();
+      const msg = `Olá ${patient.name}! Seu agendamento foi confirmado para ${formatDate(date)} às ${time}.`;
+      window.open(`https://wa.me/55${patient.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+    });
   } else {
-    document.getElementById('patientModalTitle').textContent = 'Novo Paciente';
+    const msg = `Olá ${apt.patientName}! Lembramos do seu agendamento em ${formatDate(apt.date)} às ${apt.time}.`;
+    window.open(`https://wa.me/55${apt.patientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+}
+
+// ==========================================
+// PACIENTES
+// ==========================================
+
+async function renderPatients() {
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/pacientes').once('value');
+  const patients = snapshot.val() || {};
+  
+  const container = document.getElementById('patientsList');
+  container.innerHTML = Object.entries(patients).map(([id, p]) => `
+    <div class="card" onclick="openPatientModal('${id}')">
+      <h4>${p.name}</h4>
+      <p>📱 ${p.phone}</p>
+      <p style="color:#718096;font-size:12px">${p.complaint || 'Sem queixa registrada'}</p>
+    </div>
+  `).join('');
+  
+  if (Object.keys(patients).length === 0) {
+    container.innerHTML = '<p style="text-align:center;color:#718096;padding:40px">Nenhum paciente cadastrado. Clique em "+ Novo Paciente" para começar.</p>';
+  }
+}
+
+function searchPatients(query) {
+  const cards = document.querySelectorAll('#patientsList .card');
+  const lowerQuery = query.toLowerCase();
+  
+  cards.forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = text.includes(lowerQuery) ? 'block' : 'none';
+  });
+}
+
+async function openPatientModal(patientId = null) {
+  const modal = document.getElementById('patientModal');
+  
+  // Resetar tabs
+  showPatientTab('info');
+  
+  if (patientId) {
+    const snapshot = await database.ref('clinicas/' + currentClinica.id + '/pacientes/' + patientId).once('value');
+    const patient = snapshot.val();
+    
+    document.getElementById('patientId').value = patientId;
+    document.getElementById('patientName').value = patient.name;
+    document.getElementById('patientPhone').value = patient.phone;
+    document.getElementById('patientEmail').value = patient.email || '';
+    document.getElementById('patientValue').value = patient.defaultValue || '';
+    document.getElementById('patientComplaint').value = patient.complaint || '';
+    document.getElementById('patientModalTitle').textContent = 'Editar Paciente';
+    document.getElementById('btnDeletePatient').style.display = 'inline-block';
+    
+    // Carregar financeiro e evolução
+    await renderPatientFinance(patientId);
+    await renderEvolutions(patientId);
+    
+    modal.dataset.patientId = patientId;
+  } else {
     document.getElementById('patientId').value = '';
     document.getElementById('patientName').value = '';
     document.getElementById('patientPhone').value = '';
     document.getElementById('patientEmail').value = '';
     document.getElementById('patientValue').value = '';
     document.getElementById('patientComplaint').value = '';
+    document.getElementById('patientModalTitle').textContent = 'Novo Paciente';
     document.getElementById('btnDeletePatient').style.display = 'none';
+    document.getElementById('patientFinanceTable').innerHTML = '';
+    document.getElementById('evolutionsList').innerHTML = '';
+    
+    modal.dataset.patientId = '';
   }
   
-  showPatientTab('info');
-  document.getElementById('patientModal').classList.add('active');
+  modal.classList.add('active');
+}
+
+function showPatientTab(tab) {
+  document.querySelectorAll('.patient-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  
+  document.getElementById('btnTab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+  document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
 }
 
 async function savePatient() {
   const id = document.getElementById('patientId').value;
-  const dados = {
-    id: id || Date.now().toString(),
-    nome: document.getElementById('patientName').value.trim(),
-    telefone: document.getElementById('patientPhone').value.trim(),
-    email: document.getElementById('patientEmail').value.trim(),
-    valorPadrao: document.getElementById('patientValue').value,
-    queixa: document.getElementById('patientComplaint').value.trim()
-  };
+  const name = document.getElementById('patientName').value.trim();
+  const phone = document.getElementById('patientPhone').value.trim();
+  const email = document.getElementById('patientEmail').value.trim();
+  const defaultValue = parseFloat(document.getElementById('patientValue').value) || 0;
+  const complaint = document.getElementById('patientComplaint').value.trim();
   
-  if (!dados.nome || !dados.telefone) {
+  if (!name || !phone) {
     alert('Preencha nome e telefone!');
     return;
   }
   
-  if (id) {
-    const idx = pacientes.findIndex(p => p.id === id);
-    pacientes[idx] = dados;
-  } else {
-    pacientes.push(dados);
-  }
+  const patientData = {
+    name: name,
+    phone: phone,
+    email: email,
+    defaultValue: defaultValue,
+    complaint: complaint,
+    updatedAt: new Date().toISOString()
+  };
   
-  await salvarDados();
-  closeModal('patientModal');
-  renderizarPacientes();
+  try {
+    if (id) {
+      await database.ref('clinicas/' + currentClinica.id + '/pacientes/' + id).update(patientData);
+    } else {
+      const newId = generateId();
+      await database.ref('clinicas/' + currentClinica.id + '/pacientes/' + newId).set({
+        ...patientData,
+        id: newId,
+        createdAt: new Date().toISOString(),
+        createdBy: currentProfissional
+      });
+    }
+    
+    closeModal('patientModal');
+    renderPatients();
+    
+  } catch (error) {
+    alert('Erro ao salvar paciente');
+  }
 }
 
 async function deletePatient() {
-  if (!confirm('Excluir paciente e todos os dados?')) return;
+  const id = document.getElementById('patientId').value;
   
-  pacientes = pacientes.filter(p => p.id !== currentPatientId);
-  agendamentos = agendamentos.filter(a => a.pacienteId !== currentPatientId);
-  evolucoes = evolucoes.filter(e => e.pacienteId !== currentPatientId);
+  if (!id) return;
   
-  await salvarDados();
-  closeModal('patientModal');
-  renderizarPacientes();
-  renderizarAgenda();
-  atualizarResumoFinanceiro();
+  if (confirm('Tem certeza que deseja excluir este paciente? Todos os dados serão perdidos.')) {
+    await database.ref('clinicas/' + currentClinica.id + '/pacientes/' + id).remove();
+    closeModal('patientModal');
+    renderPatients();
+  }
 }
 
-// FINANCEIRO
-function renderizarFinanceiro() {
+// ==========================================
+// FINANCEIRO DO PACIENTE
+// ==========================================
+
+async function renderPatientFinance(patientId) {
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/financeiro').orderByChild('patientId').equalTo(patientId).once('value');
+  const records = snapshot.val() || {};
+  
+  let totalPaid = 0;
+  let totalPending = 0;
+  
+  const tbody = document.getElementById('patientFinanceTable');
+  tbody.innerHTML = '';
+  
+  Object.entries(records).forEach(([id, rec]) => {
+    if (rec.status === 'paid') {
+      totalPaid += rec.value;
+    } else {
+      totalPending += rec.value;
+    }
+    
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" class="session-checkbox" data-id="${id}" ${rec.status === 'paid' ? 'disabled' : ''}></td>
+      <td>${formatDate(rec.date)}</td>
+      <td>${rec.service}</td>
+      <td>${formatCurrency(rec.value)}</td>
+      <td><span style="color:${rec.status === 'paid' ? '#38a169' : '#e53e3e'}">${rec.status === 'paid' ? 'Pago' : 'Pendente'}</span></td>
+      <td>
+        ${rec.status === 'pending' ? `<button class="btn btn-success" onclick="openPaymentModal('${id}', ${rec.value})" style="padding:5px 10px">Pagar</button>` : '-'}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  
+  document.getElementById('patientPaid').textContent = formatCurrency(totalPaid);
+  document.getElementById('patientPending').textContent = formatCurrency(totalPending);
+}
+
+async function renderFinancial() {
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/financeiro').once('value');
+  const records = snapshot.val() || {};
+  
+  let totalReceived = 0;
+  let totalPending = 0;
+  let totalSessions = 0;
+  
   const tbody = document.getElementById('financialTable');
   tbody.innerHTML = '';
   
-  const pendentes = agendamentos.filter(a => !a.cancelado && !a.pago).sort((a, b) => new Date(b.data) - new Date(a.data));
-  
-  pendentes.forEach(agend => {
-    const paciente = pacientes.find(p => p.id === agend.pacienteId);
-    const row = document.createElement('tr');
-    
-    row.innerHTML = `
-      <td><input type="checkbox" onchange="toggleFinancialSelection('${agend.id}')" ${selectedFinancial.has(agend.id) ? 'checked' : ''}></td>
-      <td>${paciente ? paciente.nome : '-'}</td>
-      <td>${formatarData(agend.data)}</td>
-      <td>${agend.tipoNome}</td>
-      <td>R$ ${parseFloat(agend.valor).toFixed(2)}</td>
-      <td>-</td>
-      <td>⏳ Pendente</td>
-      <td><button class="btn btn-primary" onclick="abrirModalPagamento('${agend.id}')">Pagar</button></td>
-    `;
-    
-    tbody.appendChild(row);
+  // Filtrar apenas do profissional atual (se não for admin)
+  const filteredRecords = Object.entries(records).filter(([_, rec]) => {
+    return isAdmin || rec.profissionalId === currentProfissional;
   });
   
-  document.getElementById('selectedCount').textContent = selectedFinancial.size;
-  document.getElementById('btnCobrarSelecionados').style.display = selectedFinancial.size > 0 ? 'inline-block' : 'none';
+  filteredRecords.forEach(([id, rec]) => {
+    totalSessions++;
+    if (rec.status === 'paid') {
+      totalReceived += rec.value;
+    } else {
+      totalPending += rec.value;
+    }
+    
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" class="financial-checkbox" data-id="${id}" data-phone="${rec.patientPhone}" data-value="${rec.value}" ${rec.status === 'paid' ? 'disabled' : ''} onchange="updateSelectedCount()"></td>
+      <td>${rec.patientName}</td>
+      <td>${formatDate(rec.date)}</td>
+      <td>${rec.service}</td>
+      <td>${formatCurrency(rec.value)}</td>
+      <td>${rec.paymentMethod || '-'}</td>
+      <td><span style="color:${rec.status === 'paid' ? '#38a169' : '#e53e3e'}">${rec.status === 'paid' ? '✓ Pago' : '⏳ Pendente'}</span></td>
+      <td>
+        ${rec.status === 'pending' ? `<button class="btn btn-success" onclick="openPaymentModal('${id}', ${rec.value})" style="padding:5px 10px">Pagar</button>` : '-'}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  
+  document.getElementById('totalReceived').textContent = formatCurrency(totalReceived);
+  document.getElementById('totalPending').textContent = formatCurrency(totalPending);
+  document.getElementById('totalSessions').textContent = totalSessions;
 }
 
-function toggleFinancialSelection(id) {
-  if (selectedFinancial.has(id)) selectedFinancial.delete(id);
-  else selectedFinancial.add(id);
-  renderizarFinanceiro();
+function updateSelectedCount() {
+  const checkboxes = document.querySelectorAll('.financial-checkbox:checked:not(:disabled)');
+  const count = checkboxes.length;
+  
+  document.getElementById('selectedCount').textContent = count;
+  document.getElementById('btnCobrarSelecionados').style.display = count > 0 ? 'inline-block' : 'none';
 }
 
 function toggleAllFinancial() {
-  const pendentes = agendamentos.filter(a => !a.cancelado && !a.pago);
-  const todosSelecionados = pendentes.every(a => selectedFinancial.has(a.id));
+  const selectAll = document.getElementById('selectAllFinancial');
+  const checkboxes = document.querySelectorAll('.financial-checkbox:not(:disabled)');
   
-  pendentes.forEach(a => {
-    if (todosSelecionados) selectedFinancial.delete(a.id);
-    else selectedFinancial.add(a.id);
-  });
-  
-  renderizarFinanceiro();
+  checkboxes.forEach(cb => cb.checked = selectAll.checked);
+  updateSelectedCount();
 }
 
-// PAINEL/DASHBOARD
-function renderizarPainel() {
-  // Agrupar por tipo
-  const porTipo = {};
-  agendamentos.filter(a => !a.cancelado && a.pago).forEach(a => {
-    porTipo[a.tipoNome] = (porTipo[a.tipoNome] || 0) + parseFloat(a.valor);
+function selectAllPending() {
+  document.querySelectorAll('.financial-checkbox:not(:disabled)').forEach(cb => cb.checked = true);
+  document.getElementById('selectAllFinancial').checked = true;
+  updateSelectedCount();
+}
+
+function clearSelection() {
+  document.querySelectorAll('.financial-checkbox').forEach(cb => cb.checked = false);
+  document.getElementById('selectAllFinancial').checked = false;
+  updateSelectedCount();
+}
+
+async function sendSelectedPendingWhatsApp() {
+  const checkboxes = document.querySelectorAll('.financial-checkbox:checked:not(:disabled)');
+  
+  if (checkboxes.length === 0) return;
+  
+  let total = 0;
+  const phones = [];
+  
+  checkboxes.forEach(cb => {
+    total += parseFloat(cb.dataset.value);
+    const phone = cb.dataset.phone.replace(/\D/g, '');
+    if (!phones.includes(phone)) phones.push(phone);
   });
   
-  // Agrupar por forma de pagamento
-  const porForma = { 'Pix': 0, 'Cartão': 0, 'Dinheiro': 0 };
-  agendamentos.filter(a => !a.cancelado && a.pago).forEach(a => {
-    const forma = a.formaPagamento || 'Pix';
-    porForma[forma] = (porForma[forma] || 0) + parseFloat(a.valor);
+  const msg = `Olá! Você tem ${checkboxes.length} sessão(ões) pendente(s) no valor total de ${formatCurrency(total)}. Por favor, entre em contato para regularização. Obrigado!`;
+  
+  // Abrir WhatsApp com o primeiro número
+  if (phones.length > 0) {
+    window.open(`https://wa.me/55${phones[0]}?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+}
+
+// ==========================================
+// PAGAMENTO
+// ==========================================
+
+let currentPaymentId = null;
+let currentPaymentValue = 0;
+
+function openPaymentModal(financeId, value) {
+  currentPaymentId = financeId;
+  currentPaymentValue = value;
+  
+  document.getElementById('paymentValor').textContent = formatCurrency(value);
+  document.getElementById('formaPagamentoSelecionada').value = '';
+  
+  // Resetar seleção visual
+  document.querySelectorAll('.payment-option').forEach(opt => opt.classList.remove('selected'));
+  
+  document.getElementById('paymentModal').classList.add('active');
+}
+
+function selecionarPagamento(forma) {
+  document.getElementById('formaPagamentoSelecionada').value = forma;
+  
+  document.querySelectorAll('.payment-option').forEach(opt => opt.classList.remove('selected'));
+  document.getElementById('pay' + forma).classList.add('selected');
+}
+
+async function confirmarPagamento() {
+  const forma = document.getElementById('formaPagamentoSelecionada').value;
+  
+  if (!forma) {
+    alert('Selecione uma forma de pagamento!');
+    return;
+  }
+  
+  try {
+    await database.ref('clinicas/' + currentClinica.id + '/financeiro/' + currentPaymentId).update({
+      status: 'paid',
+      paymentMethod: forma,
+      paymentDate: new Date().toISOString(),
+      paidBy: currentProfissional
+    });
+    
+    closeModal('paymentModal');
+    renderFinancial();
+    renderCashFlow();
+    renderDashboard();
+    
+    // Se estiver no modal do paciente, atualizar lá também
+    const patientModal = document.getElementById('patientModal');
+    if (patientModal.classList.contains('active') && patientModal.dataset.patientId) {
+      renderPatientFinance(patientModal.dataset.patientId);
+    }
+    
+  } catch (error) {
+    alert('Erro ao registrar pagamento');
+  }
+}
+
+// ==========================================
+// FLUXO DE CAIXA
+// ==========================================
+
+async function renderCashFlow() {
+  const monthInput = document.getElementById('cashFlowMonth');
+  if (!monthInput.value) {
+    monthInput.value = getMonthYearKey();
+  }
+  
+  const [year, month] = monthInput.value.split('-');
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-31`;
+  
+  // Entradas (receitas pagas)
+  const finSnapshot = await database.ref('clinicas/' + currentClinica.id + '/financeiro').once('value');
+  const financeRecords = finSnapshot.val() || {};
+  
+  let entries = [];
+  let totalEntries = 0;
+  
+  Object.entries(financeRecords).forEach(([id, rec]) => {
+    if (rec.status === 'paid' && rec.date >= startDate && rec.date <= endDate) {
+      if (isAdmin || rec.profissionalId === currentProfissional) {
+        entries.push({...rec, id});
+        totalEntries += rec.value;
+      }
+    }
+  });
+  
+  // Saídas (despesas)
+  const expSnapshot = await database.ref('clinicas/' + currentClinica.id + '/despesas').once('value');
+  const expenses = expSnapshot.val() || {};
+  
+  let exits = [];
+  let totalExits = 0;
+  
+  Object.entries(expenses).forEach(([id, exp]) => {
+    if (exp.date >= startDate && exp.date <= endDate) {
+      if (isAdmin || exp.profissionalId === currentProfissional) {
+        exits.push({...exp, id});
+        totalExits += exp.value;
+      }
+    }
+  });
+  
+  // Atualizar cards
+  document.getElementById('cfEntries').textContent = formatCurrency(totalEntries);
+  document.getElementById('cfExits').textContent = formatCurrency(totalExits);
+  document.getElementById('cfBalance').textContent = formatCurrency(totalEntries - totalExits);
+  
+  // Tabela de entradas
+  const entriesTbody = document.getElementById('entriesTable');
+  entriesTbody.innerHTML = entries.map(e => `
+    <tr>
+      <td>${formatDate(e.date)}</td>
+      <td>${e.patientName}</td>
+      <td>${e.service}</td>
+      <td>${formatCurrency(e.value)}</td>
+      <td>${e.paymentMethod || 'Pix'}</td>
+    </tr>
+  `).join('');
+  
+  // Tabela de saídas
+  const exitsTbody = document.getElementById('exitsTable');
+  exitsTbody.innerHTML = exits.map(e => `
+    <tr>
+      <td>${formatDate(e.date)}</td>
+      <td>${e.description}</td>
+      <td>${e.category}</td>
+      <td>${formatCurrency(e.value)}</td>
+      <td><button class="btn btn-danger" onclick="deleteExpense('${e.id}')" style="padding:5px 10px">🗑</button></td>
+    </tr>
+  `).join('');
+}
+
+function showCashFlowTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  
+  event.target.classList.add('active');
+  document.getElementById('cf' + tab.charAt(0).toUpperCase() + tab.slice(1) + 'Tab').classList.add('active');
+}
+
+async function deleteExpense(id) {
+  if (confirm('Excluir esta despesa?')) {
+    await database.ref('clinicas/' + currentClinica.id + '/despesas/' + id).remove();
+    renderCashFlow();
+  }
+}
+
+function openExpenseModal() {
+  document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('expenseDesc').value = '';
+  document.getElementById('expenseCategory').value = 'material';
+  document.getElementById('expenseValue').value = '';
+  
+  document.getElementById('expenseModal').classList.add('active');
+}
+
+async function saveExpense() {
+  const date = document.getElementById('expenseDate').value;
+  const description = document.getElementById('expenseDesc').value.trim();
+  const category = document.getElementById('expenseCategory').value;
+  const value = parseFloat(document.getElementById('expenseValue').value) || 0;
+  
+  if (!date || !description || !value) {
+    alert('Preencha todos os campos!');
+    return;
+  }
+  
+  const expenseData = {
+    date: date,
+    description: description,
+    category: category,
+    value: value,
+    profissionalId: currentProfissional,
+    profissionalNome: currentUser.nome,
+    createdAt: new Date().toISOString()
+  };
+  
+  try {
+    const newId = generateId();
+    await database.ref('clinicas/' + currentClinica.id + '/despesas/' + newId).set(expenseData);
+    
+    closeModal('expenseModal');
+    renderCashFlow();
+    
+  } catch (error) {
+    alert('Erro ao salvar despesa');
+  }
+}
+
+// ==========================================
+// RELATÓRIOS
+// ==========================================
+
+async function renderReports() {
+  const monthInput = document.getElementById('reportMonth');
+  if (!monthInput.value) {
+    monthInput.value = getMonthYearKey();
+  }
+  
+  const [year, month] = monthInput.value.split('-');
+  
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/financeiro').once('value');
+  const records = snapshot.val() || {};
+  
+  let sessions = 0;
+  let revenue = 0;
+  const patientSummary = {};
+  
+  Object.entries(records).forEach(([_, rec]) => {
+    if (rec.date.startsWith(`${year}-${month}`)) {
+      if (isAdmin || rec.profissionalId === currentProfissional) {
+        sessions++;
+        revenue += rec.value;
+        
+        if (!patientSummary[rec.patientId]) {
+          patientSummary[rec.patientId] = {
+            name: rec.patientName,
+            sessions: 0,
+            total: 0
+          };
+        }
+        patientSummary[rec.patientId].sessions++;
+        patientSummary[rec.patientId].total += rec.value;
+      }
+    }
+  });
+  
+  document.getElementById('reportSessions').textContent = sessions;
+  document.getElementById('reportRevenue').textContent = formatCurrency(revenue);
+  
+  const tbody = document.getElementById('reportTable');
+  tbody.innerHTML = Object.values(patientSummary).map(p => `
+    <tr>
+      <td>${p.name}</td>
+      <td>${p.sessions}</td>
+      <td>${formatCurrency(p.total)}</td>
+    </tr>
+  `).join('');
+}
+
+// ==========================================
+// DASHBOARD INDIVIDUAL
+// ==========================================
+
+async function renderDashboard() {
+  const monthKey = getMonthYearKey();
+  const [year, month] = monthKey.split('-');
+  
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/financeiro').once('value');
+  const records = snapshot.val() || {};
+  
+  // Dados filtrados por profissional
+  const dadosProfissional = Object.entries(records).filter(([_, rec]) => {
+    return rec.profissionalId === currentProfissional && rec.date.startsWith(`${year}-${month}`);
+  });
+  
+  // Agrupar por tipo de serviço
+  const porTipo = {};
+  const porPagamento = { 'Pix': 0, 'Cartão': 0, 'Dinheiro': 0 };
+  
+  dadosProfissional.forEach(([_, rec]) => {
+    // Por tipo
+    if (!porTipo[rec.service]) porTipo[rec.service] = { count: 0, value: 0 };
+    porTipo[rec.service].count++;
+    porTipo[rec.service].value += rec.value;
+    
+    // Por pagamento
+    if (rec.paymentMethod && porPagamento[rec.paymentMethod] !== undefined) {
+      porPagamento[rec.paymentMethod] += rec.value;
+    }
   });
   
   // Gráfico de tipos
@@ -1599,221 +2280,431 @@ function renderizarPainel() {
   if (chartTipo) chartTipo.destroy();
   
   chartTipo = new Chart(ctxTipo, {
-    type: 'pie',
+    type: 'doughnut',
     data: {
       labels: Object.keys(porTipo),
       datasets: [{
-        data: Object.values(porTipo),
-        backgroundColor: ['#1e3a5f', '#d69e2e', '#38a169', '#e53e3e', '#805ad5']
+        data: Object.values(porTipo).map(t => t.value),
+        backgroundColor: ['#1e3a5f', '#2c5282', '#4299e1', '#63b3ed', '#90cdf4']
       }]
     },
     options: {
       responsive: true,
-      maintainAspectRatio: false
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' }
+      }
     }
   });
   
-  // Gráfico de formas de pagamento
+  // Gráfico de pagamentos
   const ctxPag = document.getElementById('chartPagamento').getContext('2d');
   if (chartPagamento) chartPagamento.destroy();
   
   chartPagamento = new Chart(ctxPag, {
     type: 'bar',
     data: {
-      labels: Object.keys(porForma),
+      labels: Object.keys(porPagamento),
       datasets: [{
-        label: 'Valor R$',
-        data: Object.values(porForma),
-        backgroundColor: ['#1e3a5f', '#d69e2e', '#38a169']
+        label: 'Valor (R$)',
+        data: Object.values(porPagamento),
+        backgroundColor: ['#38a169', '#3182ce', '#d69e2e']
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } }
+      plugins: {
+        legend: { display: false }
+      }
     }
   });
   
   // Resumo por tipo
-  const divResumo = document.getElementById('resumoTipos');
-  divResumo.innerHTML = '';
-  Object.entries(porTipo).forEach(([tipo, valor]) => {
-    divResumo.innerHTML += `
-      <div style="background:#ebf8ff;padding:15px;border-radius:8px;text-align:center">
-        <p style="color:#4a5568;font-size:14px">${tipo}</p>
-        <p style="color:#1e3a5f;font-size:20px;font-weight:bold">R$ ${valor.toFixed(2)}</p>
-      </div>
-    `;
-  });
+  const resumoDiv = document.getElementById('resumoTipos');
+  resumoDiv.innerHTML = Object.entries(porTipo).map(([tipo, dados]) => `
+    <div style="background:#f7fafc;padding:15px;border-radius:8px;text-align:center">
+      <h4 style="color:#1e3a5f;margin-bottom:5px">${tipo}</h4>
+      <p style="font-size:24px;font-weight:bold;color:#2d3748">${dados.count}</p>
+      <p style="color:#718096">atendimentos</p>
+      <p style="color:#38a169;font-weight:bold">${formatCurrency(dados.value)}</p>
+    </div>
+  `).join('');
 }
 
-// CONFIGURAÇÕES
-function carregarConfiguracoes() {
-  document.getElementById('configName').value = currentProfissional ? currentProfissional.nome : '';
-  document.getElementById('configEspecialidade').value = currentProfissional ? currentProfissional.especialidade : '';
-  document.getElementById('configPix').value = currentProfissional ? currentProfissional.pix : '';
+function gerarPDFDashboard() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
   
-  // Listar tipos de consulta
-  const divTipos = document.getElementById('listaTiposConsulta');
-  divTipos.innerHTML = '';
-  tiposConsulta.forEach(t => {
-    divTipos.innerHTML += `
-      <div class="tipo-item">
-        <span>${t.nome} - R$ ${t.valor}</span>
-        <button class="btn btn-danger" onclick="removerTipoConsulta('${t.id}')">🗑</button>
-      </div>
-    `;
-  });
+  // Cabeçalho com dados do profissional
+  doc.setFillColor(30, 58, 95);
+  doc.rect(0, 0, 210, 40, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.text('ASM Gestão Clínica', 105, 20, { align: 'center' });
+  
+  doc.setFontSize(12);
+  doc.text(`${currentUser.nome} - ${getEspecialidadeNome(currentUser.especialidade)}`, 105, 30, { align: 'center' });
+  doc.text(`Registro: ${currentUser.registro || 'N/A'}`, 105, 37, { align: 'center' });
+  
+  // Data
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(11);
+  doc.text(`Relatório gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 50);
+  
+  // Resumo
+  const monthKey = getMonthYearKey();
+  doc.setFontSize(16);
+  doc.setTextColor(30, 58, 95);
+  doc.text(`Dashboard Financeiro - ${monthKey}`, 14, 65);
+  
+  doc.save(`dashboard-${currentUser.nome}-${monthKey}.pdf`);
 }
 
-async function salvarConfiguracoes() {
-  currentProfissional.nome = document.getElementById('configName').value;
-  currentProfissional.especialidade = document.getElementById('configEspecialidade').value;
-  currentProfissional.pix = document.getElementById('configPix').value;
-  currentProfissional.tiposConsulta = tiposConsulta;
-  
-  await database.ref('profissionais/' + currentProfissional.id).update(currentProfissional);
-  
-  // Atualizar header
-  const config = professionConfig[currentProfissional.especialidade];
-  document.getElementById('currentUserName').textContent = currentProfissional.nome;
-  document.getElementById('currentUserEspecialidade').textContent = config.name;
-  
-  alert('Configurações salvas!');
-}
+// ==========================================
+// EVOLUÇÃO CLÍNICA
+// ==========================================
 
-function adicionarTipoConsulta() {
-  const nome = document.getElementById('novoTipoNome').value;
-  const valor = document.getElementById('novoTipoValor').value;
+async function renderEvolutions(patientId) {
+  const snapshot = await database.ref('clinicas/' + currentClinica.id + '/evolucoes/' + patientId).once('value');
+  const evolutions = snapshot.val() || {};
   
-  if (!nome || !valor) {
-    alert('Preencha nome e valor!');
+  const container = document.getElementById('evolutionsList');
+  
+  if (Object.keys(evolutions).length === 0) {
+    container.innerHTML = '<p style="color:#718096;text-align:center;padding:20px">Nenhuma evolução registrada</p>';
     return;
   }
   
-  tiposConsulta.push({
-    id: 'tipo_' + Date.now(),
-    nome: nome,
-    valor: parseFloat(valor)
+  container.innerHTML = Object.entries(evolutions).sort((a, b) => b[0].localeCompare(a[0])).map(([id, evo]) => `
+    <div style="background:#f7fafc;padding:15px;border-radius:8px;margin-bottom:10px;border-left:4px solid #1e3a5f">
+      <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+        <strong style="color:#1e3a5f">${formatDate(evo.date)}</strong>
+        <span style="color:#718096;font-size:12px">${evo.profissionalNome}</span>
+      </div>
+      <p style="white-space:pre-wrap">${evo.text}</p>
+    </div>
+  `).join('');
+}
+
+async function addEvolution() {
+  const patientId = document.getElementById('patientModal').dataset.patientId;
+  const text = document.getElementById('newEvolution').value.trim();
+  
+  if (!text) {
+    alert('Digite a evolução!');
+    return;
+  }
+  
+  const evolutionData = {
+    date: new Date().toISOString().split('T')[0],
+    text: text,
+    profissionalId: currentProfissional,
+    profissionalNome: currentUser.nome,
+    createdAt: new Date().toISOString()
+  };
+  
+  const newId = generateId();
+  await database.ref('clinicas/' + currentClinica.id + '/evolucoes/' + patientId + '/' + newId).set(evolutionData);
+  
+  document.getElementById('newEvolution').value = '';
+  await renderEvolutions(patientId);
+}
+
+// ==========================================
+// RELATÓRIO DE PACIENTE COM PDF
+// ==========================================
+
+async function generatePatientReport() {
+  const patientId = document.getElementById('patientModal').dataset.patientId;
+  const month = document.getElementById('reportMonthPatient').value;
+  
+  if (!month) {
+    alert('Selecione o mês!');
+    return;
+  }
+  
+  const [year, mon] = month.split('-');
+  
+  // Buscar dados do paciente
+  const patientSnap = await database.ref('clinicas/' + currentClinica.id + '/pacientes/' + patientId).once('value');
+  const patient = patientSnap.val();
+  
+  // Buscar evoluções do período
+  const evoSnap = await database.ref('clinicas/' + currentClinica.id + '/evolucoes/' + patientId).once('value');
+  const evolutions = evoSnap.val() || {};
+  
+  const evolucoesPeriodo = Object.values(evolutions).filter(e => e.date.startsWith(`${year}-${mon}`));
+  
+  // Buscar atendimentos do período
+  const finSnap = await database.ref('clinicas/' + currentClinica.id + '/financeiro').orderByChild('patientId').equalTo(patientId).once('value');
+  const financeRecords = finSnap.val() || {};
+  
+  const atendimentos = Object.values(financeRecords).filter(f => f.date.startsWith(`${year}-${mon}`));
+  
+  // Gerar relatório
+  let report = `RELATÓRIO DE ACOMPANHAMENTO\n`;
+  report += `================================\n\n`;
+  report += `Paciente: ${patient.name}\n`;
+  report += `Período: ${mon}/${year}\n`;
+  report += `Profissional: ${currentUser.nome}\n`;
+  report += `Registro: ${currentUser.registro || 'N/A'}\n\n`;
+  
+  report += `RESUMO DO PERÍODO\n`;
+  report += `-----------------\n`;
+  report += `Total de atendimentos: ${atendimentos.length}\n`;
+  report += `Valor total: ${formatCurrency(atendimentos.reduce((a, b) => a + b.value, 0))}\n\n`;
+  
+  report += `EVOLUÇÕES CLÍNICAS\n`;
+  report += `------------------\n`;
+  
+  if (evolucoesPeriodo.length === 0) {
+    report += `Nenhuma evolução registrada neste período.\n`;
+  } else {
+    evolucoesPeriodo.sort((a, b) => a.date.localeCompare(b.date)).forEach(evo => {
+      report += `\nData: ${formatDate(evo.date)}\n`;
+      report += `Profissional: ${evo.profissionalNome}\n`;
+      report += `${evo.text}\n`;
+      report += `---\n`;
+    });
+  }
+  
+  document.getElementById('reportContent').textContent = report;
+  document.getElementById('reportContainer').style.display = 'block';
+}
+
+function copyReport() {
+  const content = document.getElementById('reportContent').textContent;
+  navigator.clipboard.writeText(content).then(() => {
+    alert('Relatório copiado!');
+  });
+}
+
+function sendReportWhatsApp() {
+  const patientId = document.getElementById('patientModal').dataset.patientId;
+  
+  database.ref('clinicas/' + currentClinica.id + '/pacientes/' + patientId).once('value').then(snap => {
+    const patient = snap.val();
+    const report = document.getElementById('reportContent').textContent;
+    
+    const msg = `Olá ${patient.name}! Segue seu relatório de acompanhamento:\n\n${report.substring(0, 500)}...`;
+    window.open(`https://wa.me/55${patient.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+  });
+}
+
+function generatePDFReport() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  // Cabeçalho com dados do profissional e registro
+  doc.setFillColor(30, 58, 95);
+  doc.rect(0, 0, 210, 50, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22);
+  doc.text('ASM Gestão Clínica', 105, 20, { align: 'center' });
+  
+  doc.setFontSize(12);
+  doc.text(`${currentUser.nome}`, 105, 32, { align: 'center' });
+  doc.text(`${getEspecialidadeNome(currentUser.especialidade)} - Registro: ${currentUser.registro || 'N/A'}`, 105, 40, { align: 'center' });
+  
+  // Conteúdo
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(11);
+  
+  const content = document.getElementById('reportContent').textContent;
+  const splitText = doc.splitTextToSize(content, 180);
+  
+  let y = 65;
+  splitText.forEach(line => {
+    if (y > 280) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.text(line, 15, y);
+    y += 6;
   });
   
-  document.getElementById('novoTipoNome').value = '';
-  document.getElementById('novoTipoValor').value = '';
-  carregarConfiguracoes();
-  carregarSelectTipos();
+  // Rodapé
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.setTextColor(128, 128, 128);
+    doc.text(`© 2024 ASM Gestão Clínica - Dra. Andresa Augusto - Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+  }
+  
+  doc.save(`relatorio-${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
-function removerTipoConsulta(id) {
-  tiposConsulta = tiposConsulta.filter(t => t.id !== id);
-  carregarConfiguracoes();
-  carregarSelectTipos();
+function generateMonthlyReportPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  // Cabeçalho
+  doc.setFillColor(30, 58, 95);
+  doc.rect(0, 0, 210, 50, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22);
+  doc.text('ASM Gestão Clínica', 105, 20, { align: 'center' });
+  
+  doc.setFontSize(12);
+  doc.text(`${currentUser.nome}`, 105, 32, { align: 'center' });
+  doc.text(`${getEspecialidadeNome(currentUser.especialidade)} - Registro: ${currentUser.registro || 'N/A'}`, 105, 40, { align: 'center' });
+  
+  // Título
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(16);
+  doc.text(`Relatório Mensal - ${document.getElementById('reportMonth').value}`, 14, 65);
+  
+  // Resumo
+  const sessions = document.getElementById('reportSessions').textContent;
+  const revenue = document.getElementById('reportRevenue').textContent;
+  
+  doc.setFontSize(12);
+  doc.text(`Total de Atendimentos: ${sessions}`, 14, 80);
+  doc.text(`Faturamento: ${revenue}`, 14, 90);
+  
+  // Tabela
+  const table = document.getElementById('reportTable');
+  const rows = Array.from(table.querySelectorAll('tr')).map(row => 
+    Array.from(row.querySelectorAll('td, th')).map(cell => cell.textContent)
+  );
+  
+  doc.autoTable({
+    startY: 100,
+    head: [rows[0]],
+    body: rows.slice(1),
+    theme: 'striped',
+    headStyles: { fillColor: [30, 58, 95] }
+  });
+  
+  // Rodapé
+  doc.setFontSize(10);
+  doc.setTextColor(128, 128, 128);
+  doc.text('© 2024 ASM Gestão Clínica - Dra. Andresa Augusto', 105, 290, { align: 'center' });
+  
+  doc.save(`relatorio-mensal-${document.getElementById('reportMonth').value}.pdf`);
 }
 
-// PAINEL ADMIN
-async function carregarPainelAdmin() {
-  try {
-    // Contar ativações
-    const ativacoesSnap = await database.ref('activationCodes').orderByChild('used').equalTo(true).once('value');
-    let countAtivacoes = 0;
-    let listaAtivacoes = [];
-    
-    ativacoesSnap.forEach(child => {
-      countAtivacoes++;
-      const data = child.val();
-      listaAtivacoes.push({
-        codigo: child.key,
-        cpf: data.cpf,
-        data: data.activatedAt
+// ==========================================
+// ADMIN - PAINEL DE CONTROLE
+// ==========================================
+
+async function carregarDadosAdmin() {
+  // Total de clínicas ativadas
+  const clinicaSnap = await database.ref('clinicas').once('value');
+  const clinicas = clinicaSnap.val() || {};
+  document.getElementById('totalAtivacoes').textContent = Object.keys(clinicas).length;
+  
+  // Tentativas de burla
+  const burlaSnap = await database.ref('tentativasBurla').once('value');
+  const tentativas = burlaSnap.val() || {};
+  document.getElementById('totalTentativasBurla').textContent = Object.keys(tentativas).length;
+  
+  // Lista de tentativas
+  const listaBurla = document.getElementById('listaTentativasBurla');
+  const tentativasArray = Object.entries(tentativas).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 10);
+  
+  if (tentativasArray.length === 0) {
+    listaBurla.innerHTML = '<p style="color:#718096">Nenhuma tentativa detectada</p>';
+  } else {
+    listaBurla.innerHTML = tentativasArray.map(([id, t]) => `
+      <div class="tentativa-burla">
+        <strong>Código:</strong> ${t.codigo}<br>
+        <strong>CPF Tentativa:</strong> ${formatCPF(t.cpfTentativa)}<br>
+        <strong>Data:</strong> ${new Date(t.data).toLocaleString('pt-BR')}
+      </div>
+    `).join('');
+  }
+  
+  // Lista de ativações
+  const listaAtivacoes = document.getElementById('listaAtivacoesAdmin');
+  const ativacoes = [];
+  
+  Object.entries(clinicas).forEach(([id, clinica]) => {
+    if (clinica.profissionais) {
+      Object.values(clinica.profissionais).forEach(prof => {
+        ativacoes.push({
+          data: clinica.dataAtivacao,
+          cpf: prof.cpf,
+          codigo: clinica.codigo,
+          nome: prof.nome || 'N/A',
+          especialidade: prof.especialidade || 'N/A'
+        });
       });
-    });
-    
-    document.getElementById('totalAtivacoes').textContent = countAtivacoes;
-    
-    // Tentativas de burla
-    const burlaSnap = await database.ref('tentativasBurla').once('value');
-    const tentativas = burlaSnap.val() ? Object.values(burlaSnap.val()) : [];
-    document.getElementById('totalTentativasBurla').textContent = tentativas.length;
-    
-    // Listar tentativas
-    const divBurla = document.getElementById('listaTentativasBurla');
-    if (tentativas.length === 0) {
-      divBurla.innerHTML = '<p style="color:#718096">Nenhuma tentativa detectada</p>';
+    }
+  });
+  
+  listaAtivacoes.innerHTML = ativacoes.sort((a, b) => b.data.localeCompare(a.data)).map(a => `
+    <tr>
+      <td>${new Date(a.data).toLocaleDateString('pt-BR')}</td>
+      <td>${formatCPF(a.cpf)}</td>
+      <td>${a.codigo}</td>
+      <td>${a.nome}</td>
+      <td>${getEspecialidadeNome(a.especialidade)}</td>
+    </tr>
+  `).join('');
+}
+
+// ==========================================
+// INICIALIZAÇÃO
+// ==========================================
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Máscara de CPF
+  document.getElementById('loginCPF')?.addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length <= 11) {
+      value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+      e.target.value = value;
+    }
+  });
+  
+  document.getElementById('ativacaoCPF')?.addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length <= 11) {
+      value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+      e.target.value = value;
+    }
+  });
+  
+  // Verificar sessão salva
+  const session = localStorage.getItem('asm_session');
+  if (session) {
+    const data = JSON.parse(session);
+    // Verificar se sessão não expirou (7 dias)
+    if (Date.now() - data.timestamp < 7 * 24 * 60 * 60 * 1000) {
+      // Restaurar sessão
+      database.ref('profissionais/' + data.profissionalId).once('value').then(snap => {
+        const prof = snap.val();
+        if (prof) {
+          currentUser = prof;
+          currentProfissional = data.profissionalId;
+          currentClinica = { id: prof.clinicaId };
+          isAdmin = false;
+          entrarSistema();
+        }
+      });
     } else {
-      divBurla.innerHTML = '';
-      tentativas.forEach(t => {
-        divBurla.innerHTML += `
-          <div class="tentativa-burla">
-            <strong>Data:</strong> ${new Date(t.data).toLocaleString('pt-BR')}<br>
-            <strong>CPF Tentativa:</strong> ${t.cpfTentativa}<br>
-            <strong>Código:</strong> ${t.codigo}<br>
-            <strong>CPF Original:</strong> ${t.cpfOriginal}
-          </div>
-        `;
-      });
+      localStorage.removeItem('asm_session');
     }
-    
-    // Listar ativações
-    const tbody = document.getElementById('listaAtivacoesAdmin');
-    tbody.innerHTML = '';
-    
-    for (let ativ of listaAtivacoes) {
-      const profSnap = await database.ref('profissionais').orderByChild('cpf').equalTo(ativ.cpf).once('value');
-      let nome = '-';
-      let especialidade = '-';
-      
-      if (profSnap.exists()) {
-        const profData = profSnap.val();
-        const prof = Object.values(profData)[0];
-        nome = prof.nome;
-        const config = professionConfig[prof.especialidade];
-        especialidade = config ? config.name : prof.especialidade;
-      }
-      
-      tbody.innerHTML += `
-        <tr>
-          <td>${new Date(ativ.data).toLocaleDateString('pt-BR')}</td>
-          <td>${ativ.cpf}</td>
-          <td>${ativ.codigo}</td>
-          <td>${nome}</td>
-          <td>${especialidade}</td>
-        </tr>
-      `;
-    }
-    
-  } catch (error) {
-    console.error('Erro ao carregar admin:', error);
   }
-}
-
-// UTILITÁRIOS
-function mostrarErro(id, msg) {
-  const el = document.getElementById(id);
-  el.textContent = msg;
-  el.style.display = 'block';
-  setTimeout(() => el.style.display = 'none', 5000);
-}
-
-function formatarData(dataStr) {
-  const [ano, mes, dia] = dataStr.split('-');
-  return dia + '/' + mes + '/' + ano;
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
-}
-
-function logout() {
-  localStorage.removeItem('asm_cpf');
-  localStorage.removeItem('asm_codigo');
-  location.reload();
-}
-
-// Fechar modal ao clicar fora
-document.addEventListener('click', function(e) {
-  if (e.target.classList.contains('modal')) {
-    e.target.classList.remove('active');
-  }
+  
+  // Configurar mês atual nos inputs
+  const today = new Date();
+  const monthStr = today.toISOString().slice(0, 7);
+  document.getElementById('cashFlowMonth').value = monthStr;
+  document.getElementById('reportMonth').value = monthStr;
+  document.getElementById('reportMonthPatient').value = monthStr;
 });
+
+// ==========================================
+// FIM DO JAVASCRIPT
+// ==========================================
+
 </script>
 </body>
 </html>
