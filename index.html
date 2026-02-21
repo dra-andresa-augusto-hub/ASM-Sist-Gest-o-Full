@@ -860,7 +860,6 @@ async function fazerLoginAutomatico(cpf, codigo) {
   
   // Verificar se é admin
   if (cpf === 'admin') {
-    // Não faz login automático de admin por segurança
     mostrarTela('loginScreen');
     return;
   }
@@ -1006,12 +1005,13 @@ async function ativarSistema() {
     
     const codeData = snapshot.val();
     
+    // CORREÇÃO: Se código já usado, verifica se é pelo mesmo CPF
     if (codeData.used) {
       if (codeData.cpf === cpfNumeros) {
-        // Já ativou este CPF com este código, permite login
+        // Mesmo CPF, permite login
         await carregarDadosProfissional(cpfNumeros, codigo);
       } else {
-        // Registrar tentativa de burla
+        // CPF diferente, registra tentativa de burla
         await database.ref('tentativasBurla').push({
           data: new Date().toISOString(),
           cpfTentativa: cpfNumeros,
@@ -1147,8 +1147,6 @@ async function inicializarSistema() {
 // CARREGAR DADOS DO FIREBASE
 async function carregarDadosFirebase() {
   try {
-    // Se for admin, carrega todos os dados
-    // Se for profissional, carrega só os dele
     const path = isAdmin ? '' : 'profissionais/' + currentProfissional.id + '/';
     
     const [pacSnap, agendSnap, evoSnap, despSnap] = await Promise.all([
@@ -1221,8 +1219,8 @@ function renderizarAgenda() {
     calendario.appendChild(div);
   });
   
-  for (let i = 0; i < primeiroDia; i++) {
-    calendario.appendChild(document.createElement('div'));
+  for (let i = 0; i < primeiroDia; i++) { 
+    calendario.appendChild(document.createElement('div')); 
   }
   
   const hoje = new Date();
@@ -1232,7 +1230,7 @@ function renderizarAgenda() {
     div.innerHTML = '<strong>' + dia + '</strong>';
     
     if (ano === hoje.getFullYear() && mes === hoje.getMonth() && dia === hoje.getDate()) {
-      div.style.background = '#1e3a5f';
+      div.style.background = '#1e3a5f'; 
       div.style.color = 'white';
     }
     
@@ -1287,7 +1285,7 @@ function carregarSelectPacientes() {
   select.innerHTML = '<option value="">Selecione...</option>';
   pacientes.sort((a, b) => a.nome.localeCompare(b.nome)).forEach(p => {
     const opt = document.createElement('option');
-    opt.value = p.id;
+    opt.value = p.id; 
     opt.textContent = p.nome;
     select.appendChild(opt);
   });
@@ -1531,6 +1529,7 @@ async function deletePatient() {
   closeModal('patientModal');
   renderizarPacientes();
   renderizarAgenda();
+  atualizarResumoFinanceiro();
 }
 
 // FINANCEIRO
@@ -1578,53 +1577,6 @@ function toggleAllFinancial() {
   });
   
   renderizarFinanceiro();
-}
-
-// FLUXO DE CAIXA
-function renderizarFluxoCaixa() {
-  const mes = document.getElementById('cashFlowMonth').value;
-  if (!mes) return;
-  
-  const entradas = agendamentos.filter(a => !a.cancelado && a.pago && a.data.startsWith(mes));
-  const despesasMes = despesas.filter(d => d.data.startsWith(mes));
-  
-  const totalEntradas = entradas.reduce((s, a) => s + parseFloat(a.valor), 0);
-  const totalSaidas = despesasMes.reduce((s, d) => s + parseFloat(d.valor), 0);
-  
-  document.getElementById('cfEntries').textContent = 'R$ ' + totalEntradas.toFixed(2);
-  document.getElementById('cfExits').textContent = 'R$ ' + totalSaidas.toFixed(2);
-  document.getElementById('cfBalance').textContent = 'R$ ' + (totalEntradas - totalSaidas).toFixed(2);
-  
-  // Tabela de entradas
-  const tbodyEntradas = document.getElementById('entriesTable');
-  tbodyEntradas.innerHTML = '';
-  entradas.sort((a, b) => new Date(b.data) - new Date(a.data)).forEach(agend => {
-    const paciente = pacientes.find(p => p.id === agend.pacienteId);
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${formatarData(agend.data)}</td>
-      <td>${paciente ? paciente.nome : '-'}</td>
-      <td>${agend.tipoNome}</td>
-      <td>R$ ${parseFloat(agend.valor).toFixed(2)}</td>
-      <td>${agend.formaPagamento || '-'}</td>
-    `;
-    tbodyEntradas.appendChild(row);
-  });
-  
-  // Tabela de saídas
-  const tbodySaidas = document.getElementById('exitsTable');
-  tbodySaidas.innerHTML = '';
-  despesasMes.sort((a, b) => new Date(b.data) - new Date(a.data)).forEach(desp => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${formatarData(desp.data)}</td>
-      <td>${desp.descricao}</td>
-      <td>${desp.categoria}</td>
-      <td>R$ ${parseFloat(desp.valor).toFixed(2)}</td>
-      <td><button class="btn btn-danger" onclick="excluirDespesa('${desp.id}')">🗑</button></td>
-    `;
-    tbodySaidas.appendChild(row);
-  });
 }
 
 // PAINEL/DASHBOARD
@@ -1805,7 +1757,6 @@ async function carregarPainelAdmin() {
     tbody.innerHTML = '';
     
     for (let ativ of listaAtivacoes) {
-      // Buscar nome do profissional
       const profSnap = await database.ref('profissionais').orderByChild('cpf').equalTo(ativ.cpf).once('value');
       let nome = '-';
       let especialidade = '-';
